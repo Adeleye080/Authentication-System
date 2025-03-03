@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "FastAPI-Auth"
+version = "0.1.0"
+description = "full authentication system with JWT, OAuth2, 2FA, role-based access control (RBAC), and audit logging for FastAPI applications"
+authors = ["Ajiboye Adeleye Pius"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.115.11"
+uvicorn = "^0.34.0"
+python-jose = {extras = ["cryptography"], version = "^3.4.0"}
+passlib = "^1.7.4"
+bcrypt = "^4.3.0"
+python-multipart = "^0.0.20"
+email-validator = "^2.2.0"
+pyotp = "^2.9.0"
+SQLAlchemy = "^2.0.38"
+databases = "^0.9.0"
+uuid7 = "^0.1.0"
+pydantic-settings = "^2.8.1"
+python-decouple = "^3.8"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
