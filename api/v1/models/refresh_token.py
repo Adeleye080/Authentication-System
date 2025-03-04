@@ -7,9 +7,9 @@ from models.base_model import BaseModel
 class RefreshToken(BaseModel, Base):
     __tablename__ = "refresh_tokens"
 
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
-    token = Column(Text, unique=True, nullable=False)
+    user_id = Column(String(128), ForeignKey("users.id"), nullable=False)
+    token = Column(String(225), unique=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
-    revoked = Column(Boolean, default=False)
+    revoked = Column(Boolean, default=False, nullable=False)
 
-    user = relationship("User", back_populates="tokens")
+    user = relationship("User", back_populates="refresh_tokens")
