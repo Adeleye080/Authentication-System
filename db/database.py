@@ -31,6 +31,10 @@ def get_db_engine(test_mode: bool = False):
         DATABASE_URL = (
             f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
         )
+    elif DB_TYPE == "mysql":
+        DATABASE_URL = (
+            f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+        )
 
     return create_engine(DATABASE_URL)
 
