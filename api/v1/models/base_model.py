@@ -5,7 +5,7 @@ This is the Base Model Class
 from uuid_extensions import uuid7
 from fastapi import Depends
 from db.database import Base
-from sqlalchemy import Column, String, DateTime, func
+from sqlalchemy import Column, String, DateTime, func, Index
 
 
 class BaseModel(Base):
@@ -18,6 +18,14 @@ class BaseModel(Base):
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    @classmethod
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if not cls.__abstract__:
+            cls.__table_args__ = getattr(cls, "__table_args__", ()) + (
+                Index(f"ix_{cls.__tablename__}_id", "id"),
+            )
 
     def to_dict(self):
         """returns a dictionary representation of the instance"""
