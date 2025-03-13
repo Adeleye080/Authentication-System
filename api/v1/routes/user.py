@@ -144,16 +144,25 @@ def soft_delete_auth_user(user_id: UUID, db: Session = Depends(get_db)):
     This endpoint deletes a user from the system
     Accessible to users and moderators
     """
-    pass
+
+    user = check_model_existence(db=db, model=User, id=user_id)
+    
+    user_service.soft_delete(db=db, schema=user)
+
+    return JsonResponseDict(
+        message="user deleted successfully",
+        data=user.to_dict(),
+        status_code=200,
+    )
 
 
-@user_router.delete(
-    "/{user_id}", response_model=UserResponseModel, status_code=status.HTTP_200_OK
-)
-def hard_delete_auth_user(user_id: UUID, db: Session = Depends(get_db)):
-    """
-    Caution!!
-    This endpoint removes a user from the system totally
-    Only accessible to superadmins
-    """
-    pass
+# @user_router.delete(
+#     "/{user_id}", response_model=UserResponseModel, status_code=status.HTTP_200_OK
+# )
+# def hard_delete_auth_user(user_id: UUID, db: Session = Depends(get_db)):
+#     """
+#     Caution!!
+#     This endpoint removes a user from the system totally
+#     Only accessible to superadmins
+#     """
+#     pass

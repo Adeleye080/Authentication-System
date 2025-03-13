@@ -122,9 +122,35 @@ class UserService(Service):
 
     def delete(self, db: Session, schema: UserResponseModel):
         """
-        deletes an auth user from the system
+        CAUTION!!
+        DO NOT USE UNLESS DELIBRATELY NEEDED
+
+        This method removes user totally from the system
         """
-        pass
+        user = db.query(User).filter(User.id == schema.id).first()
+        if not user:
+            raise HTTPException(
+                status_code=404, detail="Auth user does not exist in our system!"
+            )
+        db.delete(user)
+        db.commit()
+        return True
+
+    def soft_delete(self, db: Session, schema: UserResponseModel):
+        """
+        This method deletes user by setting is_deleted to True
+        """
+
+        user = db.query(User).filter(User.id == schema.id).first()
+        if not user:
+            raise HTTPException(
+                status_code=404, detail="Auth user does not exist in our system!"
+            )
+        setattr(user, "is_deleted", True)
+        db.commit()
+        db.refresh(user)
+
+        return True
 
     def authenticate_user(self, db: Session, email: str, password: str):
         """Function to authenticate a user"""
