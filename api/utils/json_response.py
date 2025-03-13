@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""" This module contains the Json response class """
+"""This module contains the Json response class"""
 from enum import Enum
 from json import dumps
 from fastapi import status
