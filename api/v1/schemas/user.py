@@ -15,49 +15,60 @@ from enum import Enum as PyEnum
 
 
 PASSWORD_REGEX = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%&*?_~-]).{8,}$")
+UUID_REGEX = r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
 
 
 def validate_mx_record(domain: str):
     """
     Validate mx records for email
     """
-    try:
-        # Try to resolve the MX record for the domain
-        mx_records = dns.resolver.resolve(domain, "MX")
-        return True if mx_records else False
-    except dns.resolver.NoAnswer:
-        return False
-    except dns.resolver.NXDOMAIN:
-        return False
-    except Exception:
-        return False
+    # try:
+    #     # Try to resolve the MX record for the domain
+    #     mx_records = dns.resolver.resolve(domain, "MX")
+    #     return True if mx_records else False
+    # except dns.resolver.NoAnswer:
+    #     return False
+    # except dns.resolver.NXDOMAIN:
+    #     return False
+    # except Exception:
+    #     return False
+    return True
 
 
-class User(BaseModel):
+class UserResponseModel(BaseModel):
+    """Auth User model"""
+
     id: str
     email: EmailStr
-    is_active: bool = True
+    recovery_email: EmailStr
+    is_active: bool = False
     is_verified: bool = False
     is_deleted: bool = False
     created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
 
 
+class UserUpdateSchema(BaseModel):
+    """user update schema for user"""
+
+    recovery_email: EmailStr
+
+
 class UserCreate(BaseModel):
     """Schema to create a user"""
 
-    email: EmailStr
+    email: EmailStr = "user@AuthSystem.com"
     password: Annotated[
         str, StringConstraints(min_length=8, max_length=64, strip_whitespace=True)
-    ]
-    # Added the confirm_password field to UserCreate Model
+    ] = "AuthUser12@"
     confirm_password: Annotated[
         str,
         StringConstraints(min_length=8, max_length=64, strip_whitespace=True),
         Field(exclude=True),  # exclude confirm_password field
-    ]
+    ] = "AuthUser12@"
 
     @model_validator(mode="before")
     @classmethod
@@ -106,6 +117,15 @@ class UserCreate(BaseModel):
         return values
 
 
+class UserID(BaseModel):
+    """User ID format (String, Any UUID version)"""
+
+    id: Annotated[
+        str,
+        StringConstraints(pattern=UUID_REGEX),
+    ]
+
+
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
@@ -118,13 +138,33 @@ class UserData(BaseModel):
 
     id: str
     email: EmailStr
+    recovery_email: EmailStr
     is_active: bool
-    is_deleted: bool
+    is_deleted: bool = False
     is_verified: bool
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserUpdateResponseModel(BaseModel):
+    """Auth User model"""
+
+    message: str
+    status_code: int = 200
+    data: UserData
+
+
+class HyperMedia(BaseModel):
+    """Hypermedia infos"""
+
+    current_page: int
+    per_page: int
+    total_pages: int
+    total: int
+    count: int
+    links: dict[str, str] = {"prev_page": "/?page=1", "next_page": "?page=3"}
 
 
 class AllUsersResponse(BaseModel):
@@ -134,11 +174,9 @@ class AllUsersResponse(BaseModel):
 
     message: str
     status_code: int
-    status: str
-    page: int
-    per_page: int
-    total: int
+    status: str = "success"
     data: Union[List[UserData], List[None]]
+    pagination: HyperMedia
 
 
 class AdminCreateUserResponse(BaseModel):
@@ -208,6 +246,15 @@ class LoginRequest(BaseModel):
         return values
 
 
+class LoginResponseModel(BaseModel):
+    """
+    Schema for successful login
+    """
+
+    access_token: str
+    refresh_token: str
+
+
 class DeactivateUserSchema(BaseModel):
     """Schema for deactivating a user"""
 
@@ -271,7 +318,21 @@ class ChangePasswordSchema(BaseModel):
         return values
 
 
-class RoleEnum(PyEnum):
+class RoleEnum(str, PyEnum):
     ADMIN = "admin"
     USER = "user"
     MODERATOR = "moderator"
+
+
+class AccessTokenData(BaseModel):
+    """schema for jwt access token data"""
+
+    id: str
+    email: EmailStr = None
+
+
+class DeactivateUserSchema(BaseModel):
+    """Schema for deactivating a user"""
+
+    reason: Optional[str] = None
+    confirmation: bool
