@@ -1,6 +1,5 @@
 from sqlalchemy import Column, Boolean, String, Index, Enum
 from sqlalchemy.orm import relationship
-from db.database import Base
 from api.v1.models.base_model import BaseModel
 from api.v1.schemas.user import RoleEnum
 
@@ -31,7 +30,8 @@ class User(BaseModel):
 
     def to_dict(self):
         obj_dict = super().to_dict()
-        obj_dict.pop("password")
+        if obj_dict.get("password", False):
+            obj_dict.pop("password")
         return obj_dict
 
     def __str__(self):
