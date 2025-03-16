@@ -7,10 +7,10 @@ from pydantic import (
     model_validator,
 )
 from datetime import datetime
-from typing import Annotated, List, Union, Optional
+from typing import Annotated, List, Union, Optional, Dict
 import re
 import dns.resolver
-from email_validator import validate_email, EmailNotValidError
+from email_validator import validate_email, EmailNotValidError  # type: ignore
 from enum import Enum as PyEnum
 
 
@@ -40,7 +40,7 @@ class UserResponseModel(BaseModel):
 
     id: str
     email: EmailStr
-    recovery_email: EmailStr
+    recovery_email: Optional[EmailStr]
     is_active: bool = False
     is_verified: bool = False
     is_deleted: bool = False
@@ -140,7 +140,6 @@ class UserData(BaseModel):
     email: EmailStr
     recovery_email: EmailStr
     is_active: bool
-    is_deleted: bool = False
     is_verified: bool
     created_at: datetime
     updated_at: datetime
@@ -246,20 +245,30 @@ class LoginRequest(BaseModel):
         return values
 
 
+class LoginToken(BaseModel):
+    """User Tokens"""
+
+    acesss_token: str
+    refresh_token: str
+    scheme: str
+
+
+class LoginDataSchema(BaseModel):
+    """data schema to return during login"""
+
+    tokens: LoginToken
+    profile: UserData
+
+
 class LoginResponseModel(BaseModel):
     """
     Schema for successful login
     """
 
-    access_token: str
-    refresh_token: str
-
-
-class DeactivateUserSchema(BaseModel):
-    """Schema for deactivating a user"""
-
-    reason: Optional[str] = None
-    confirmation: bool
+    status: str
+    status_code: int = 200
+    message: str
+    data: LoginDataSchema
 
 
 class ChangePasswordSchema(BaseModel):
