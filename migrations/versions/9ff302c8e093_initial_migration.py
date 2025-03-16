@@ -2,7 +2,7 @@
 Initial migration
 
 Revision ID: 9ff302c8e093
-Revises: 
+Revises:
 Create Date: 2025-03-04 12:25:04.548177
 
 """
@@ -72,7 +72,7 @@ def upgrade():
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column(
             "user_id",
-            sa.Uuid,
+            sa.String(36),
             sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
         ),
