@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic_settings import BaseSettings
 from decouple import config
 from pathlib import Path
@@ -22,7 +23,7 @@ class Settings(BaseSettings):
     DB_PASSWORD: str = config("DB_PASSWORD")
     DB_NAME: str = config("DB_NAME")
     DB_TYPE: str = config("DB_TYPE")
-    DB_URL: str = config("DB_URL")
+    DB_URL: str = config("DB_URL", default="0", cast=str)
 
     # MAIL_USERNAME: str = config("MAIL_USERNAME")
     # MAIL_PASSWORD: str = config("MAIL_PASSWORD")
