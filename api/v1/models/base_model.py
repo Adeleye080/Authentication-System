@@ -32,7 +32,6 @@ class BaseModel(Base):
         obj_dict = self.__dict__.copy()
         if obj_dict["_sa_instance_state"]:
             del obj_dict["_sa_instance_state"]
-        obj_dict["id"] = self.id
         if self.created_at:
             obj_dict["created_at"] = self.created_at.isoformat()
         if self.updated_at:
