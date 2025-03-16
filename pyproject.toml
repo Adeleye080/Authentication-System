@@ -3,7 +3,7 @@ name = "FastAPI-Auth"
 version = "0.1.0"
 description = "full authentication system with JWT, OAuth2, 2FA, role-based access control (RBAC), and audit logging for FastAPI applications"
 authors = ["Ajiboye Adeleye Pius"]
-license = "MIT"
+license = "ISC"
 
 [tool.poetry.dependencies]
 python = "^3.10"
