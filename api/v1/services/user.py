@@ -1,16 +1,17 @@
 from fastapi import HTTPException, Depends, Request, status
 from fastapi.security import OAuth2PasswordBearer
 
-from passlib.context import CryptContext
-from typing import Tuple, Optional
+from passlib.context import CryptContext  # type: ignore
+from typing import Tuple, Optional, List
 from sqlalchemy.orm import Session
-from db.database import get_db
 import datetime as dt
 from jose import JWTError, jwt
 from sqlalchemy import func
+from db.database import get_db
 
 from api.utils.settings import settings
 from api.v1.models.user import User
+from api.v1.models.refresh_token import RefreshToken
 from api.v1.schemas.user import (
     UserCreate,
     UserResponseModel,
@@ -68,9 +69,10 @@ class UserService(Service):
         all_users = db.query(User).all()
         return all_users
 
-    def fetch_all_paginated(self, db: Session, page: int, per_page: int):
+    def fetch_all_paginated(self, db: Session, page: int = 1, per_page: int = 10):
         """
-        Fetch all auth user in the system
+        Fetch all auth user in the system with no respect for
+        statuses [active status, deletion status, and verification status]
 
         Args:
             :param page: int: page number
@@ -88,6 +90,64 @@ class UserService(Service):
 
         # Query to get the total number of users
         total = db.query(func.count(User.id)).scalar()
+
+        return users, total
+
+    def fetch_all_paginated_with_filters(
+        self,
+        db: Session,
+        page: int,
+        per_page: int,
+        is_active: Optional[bool] = True,
+        is_deleted: Optional[bool] = False,
+        is_verified: Optional[bool] = True,
+    ) -> Tuple[List[User], int]:
+        """
+        Fetch all auth users in the system with optional filters.
+
+        Args:
+            :param page: int: page number
+            :param per_page: int: number of items per page
+            :param is_active: Optional[bool]: Filter users based on active status
+            :param is_deleted: Optional[bool]: Filter users based on deletion status
+            :param is_verified: Optional[bool]: Filter users based on verification status
+
+        Returns:
+            :return: Tuple[List[User], int]: Tuple of users and total number of users matching filters
+        """
+        # Calculate the offset for pagination
+        offset = (page - 1) * per_page
+
+        # Base query
+        query = db.query(User)
+
+        # Apply optional filters
+        if is_active is not None:
+            query = query.filter(User.is_active == is_active)
+        if is_deleted is not None:
+            query = query.filter(User.is_deleted == is_deleted)
+        if is_verified is not None:
+            query = query.filter(User.is_verified == is_verified)
+
+        # Get paginated users
+        users = query.offset(offset).limit(per_page).all()
+
+        # Get the total number of filtered users
+        total = (
+            db.query(func.count(User.id))
+            .filter(
+                *(
+                    User.is_active == is_active if is_active is not None else True,
+                    User.is_deleted == is_deleted if is_deleted is not None else False,
+                    (
+                        User.is_verified == is_verified
+                        if is_verified is not None
+                        else True
+                    ),
+                )
+            )
+            .scalar()
+        )
 
         return users, total
 
@@ -109,7 +169,7 @@ class UserService(Service):
             raise HTTPException(status_code=404, detail="User not found")
 
         # Convert the schema to a dictionary (excluding unset fields)
-        update_data = schema.dict(exclude_unset=True)
+        update_data = schema.model_dump(exclude_unset=True)
 
         # Update the user fields
         for key, value in update_data.items():
@@ -120,11 +180,33 @@ class UserService(Service):
 
         return user
 
-    def delete(self, db: Session, schema: UserResponseModel):
+    def delete(self, db: Session, user_id: str):
         """
         deletes an auth user from the system
         """
-        pass
+
+        user = db.query(User).filter(User.id == user_id).first()
+
+        if not user:
+            raise HTTPException(
+                detail="User does not exist in our system", status_code=404
+            )
+
+        if user.is_deleted is True:
+            raise HTTPException(
+                detail="Forbidden, User has been previously deleted!", status_code=403
+            )
+
+        try:
+            setattr(user, "is_deleted", True)
+            db.commit()
+            db.refresh(user)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail="Database operation to delete user failed"
+            )
+
+        return user
 
     def authenticate_user(self, db: Session, email: str, password: str):
         """Function to authenticate a user"""
@@ -132,7 +214,7 @@ class UserService(Service):
         user = db.query(User).filter(User.email == email).first()
 
         if not user:
-            raise HTTPException(status_code=400, detail="Invalid user credentials")
+            raise HTTPException(status_code=404, detail="User does not exist")
 
         if not self.verify_password(password, user.password):
             raise HTTPException(status_code=400, detail="Invalid user credentials")
@@ -144,6 +226,8 @@ class UserService(Service):
 
         if not user.is_active:
             raise HTTPException(detail="User is not active", status_code=403)
+        if not user.is_verified:
+            raise HTTPException(detail="User is not verified", status_code=403)
 
     def hash_password(self, password: str) -> str:
         """Function to hash a password"""
@@ -159,21 +243,38 @@ class UserService(Service):
     def create_access_token(self, user_id: str) -> str:
         """Function to create access token"""
 
-        expires = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
-        data = {"sub": user_id, "exp": expires, "type": "access"}
-        encoded_jwt = jwt.encode(data, settings.SECRET_KEY, settings.ALGORITHM)
+        try:
+            expires = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
+                minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+            )
+            data = {"sub": user_id, "exp": expires, "type": "access"}
+            encoded_jwt = jwt.encode(data, settings.SECRET_KEY, settings.ALGORITHM)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail="Failed to generate user access token"
+            ) from exc
         return encoded_jwt
 
-    def create_refresh_token(self, user_id: str) -> str:
+    def create_refresh_token(self, db: Session, user_id: str) -> str:
         """Function to create access token"""
 
-        expires = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
-            days=settings.JWT_REFRESH_EXPIRY
+        try:
+            expires = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
+                days=settings.JWT_REFRESH_EXPIRY
+            )
+            data = {"user_id": user_id, "exp": expires, "type": "refresh"}
+            encoded_jwt = jwt.encode(data, settings.SECRET_KEY, settings.ALGORITHM)
+
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail="Failed to generate user access token"
+            ) from exc
+
+        refresh_token = RefreshToken(
+            token=encoded_jwt, user_id=user_id, expires_at=expires
         )
-        data = {"user_id": user_id, "exp": expires, "type": "refresh"}
-        encoded_jwt = jwt.encode(data, settings.SECRET_KEY, settings.ALGORITHM)
+        db.add(refresh_token)
+        db.commit()
         return encoded_jwt
 
     def verify_access_token(self, access_token: str, credentials_exception):
@@ -310,6 +411,9 @@ class UserService(Service):
         user.is_active = True
 
         db.commit()
+        db.refresh(user)
+
+        return True
 
     def change_password(
         self,
