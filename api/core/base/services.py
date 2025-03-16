@@ -3,21 +3,21 @@ from abc import ABC, abstractmethod
 
 class Service(ABC):
     @abstractmethod
-    def create(self):
+    def create(self, *args, **kwargs):
         pass
 
     @abstractmethod
-    def fetch(self):
+    def fetch(self, **kwargs):
         pass
 
     @abstractmethod
-    def fetch_all(self):
+    def fetch_all(self, **kwargs):
         pass
 
     @abstractmethod
-    def update(self):
+    def update(self, **kwargs):
         pass
 
     @abstractmethod
-    def delete(self):
+    def delete(self, **kwargs):
         pass
