@@ -509,6 +509,41 @@ optional = false
 python-versions = ">=3.8"
 
 [[package]]
+name = "ua-parser"
+version = "1.0.1"
+description = "Python port of Browserscope's user agent parser"
+category = "main"
+optional = false
+python-versions = ">=3.9"
+
+[package.dependencies]
+ua-parser-builtins = "*"
+
+[package.extras]
+yaml = ["pyyaml"]
+re2 = ["google-re2"]
+regex = ["ua-parser-rs"]
+
+[[package]]
+name = "ua-parser-builtins"
+version = "0.18.0.post1"
+description = "Precompiled rules for User Agent Parser"
+category = "main"
+optional = false
+python-versions = ">=3.9"
+
+[[package]]
+name = "user-agents"
+version = "2.2.0"
+description = "A library to identify devices (phones, tablets) and their capabilities by parsing browser user agent strings."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+ua-parser = ">=0.10.0"
+
+[[package]]
 name = "uuid7"
 version = "0.1.0"
 description = "UUID version 7, generating time-sorted UUIDs with 200ns time resolution and 48 bits of randomness"
@@ -535,7 +570,7 @@ standard = ["colorama (>=0.4)", "httptools (>=0.6.3)", "python-dotenv (>=0.13)",
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "c7e1641678946db7e42772772d6a5d965f4e16a72e5b797ec4a8766afd09ff6d"
+content-hash = "abd8eed51d5d049430e6f120ed56f2321779e4466049ef8bdfbc77fd2ab3713d"
 
 [metadata.files]
 alembic = []
@@ -577,5 +612,8 @@ sniffio = []
 sqlalchemy = []
 starlette = []
 typing-extensions = []
+ua-parser = []
+ua-parser-builtins = []
+user-agents = []
 uuid7 = []
 uvicorn = []
