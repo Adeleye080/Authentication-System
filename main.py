@@ -41,23 +41,7 @@ app.add_middleware(
 
 
 @app.get(
-    "/probe",
-    tags=["General"],
-    status_code=status.HTTP_200_OK,
-    response_model=ProbeServerResponse,
-)
-async def probe_server():
-    """
-    Probe the server
-    """
-    return {
-        "message": "I am the Python FastAPI API responding to probe",
-        "status": "Healthy ♥️",
-    }
-
-
-@app.get(
-    "/", tags=["General"], status_code=status.HTTP_200_OK, response_model=HomeResponse
+    "/", tags=["Home"], status_code=status.HTTP_200_OK, response_model=HomeResponse
 )
 async def home():
     """
@@ -69,12 +53,28 @@ async def home():
         "status_code": status.HTTP_200_OK,
         "data": {
             "author": {
-                "name": "Ajiboye Pius A.",
+                "name": "Ajiboye Pius Adeleye",
                 "website": "https://ajiboye-pius.vercel.app",
                 "github": "https://github.com/Adeleye080",
             },
-            "URL": {},
+            "URL": "site_url",
         },
+    }
+
+
+@app.get(
+    "/probe",
+    tags=["Home"],
+    status_code=status.HTTP_200_OK,
+    response_model=ProbeServerResponse,
+)
+async def probe_server():
+    """
+    Probe the server
+    """
+    return {
+        "message": "I am the Python FastAPI API responding to probe",
+        "status": "Healthy ♥️",
     }
 
 
