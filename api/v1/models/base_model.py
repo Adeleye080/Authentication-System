@@ -13,7 +13,7 @@ class BaseModel(Base):
 
     __abstract__ = True
 
-    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid7()))
+    id = Column(String(36), primary_key=True, index=True, default=lambda: str(uuid7()))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
