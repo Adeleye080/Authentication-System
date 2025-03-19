@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 """This module contains the Json response class"""
-from enum import Enum
 from json import dumps
-from fastapi import status
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel
 from typing import Any, Dict, Optional
 
 
