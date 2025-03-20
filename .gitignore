@@ -4,3 +4,5 @@ __pycache__/*
 .env
 note.txt
 .qodo
+notes.txt
+notes*
