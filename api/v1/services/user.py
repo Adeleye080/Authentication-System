@@ -1,7 +1,7 @@
-from fastapi import HTTPException, Depends, Request, status
+from fastapi import HTTPException, Depends, Request, status, Security
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext  # type: ignore
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Annotated
 from sqlalchemy.orm import Session
 import datetime as dt
 from jose import JWTError, jwt, ExpiredSignatureError
@@ -17,12 +17,14 @@ from api.v1.schemas.user import (
     AccessTokenData,
     DeactivateUserSchema,
     UserUpdateSchema,
+    RoleEnum,
 )
 from api.core.base.services import Service
 from api.utils.validators import check_model_existence
+from api.utils.json_response import JsonResponseDict
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/swagger-login")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -224,12 +226,18 @@ class UserService(Service):
         """This checks if a user is active and verified and not a deleted user"""
 
         if not user.is_active:
-            raise HTTPException(detail="User is not active", status_code=403)
+            raise HTTPException(
+                detail="User is not active", status_code=status.HTTP_403_FORBIDDEN
+            )
         if not user.is_verified:
-            raise HTTPException(detail="User is not verified", status_code=403)
+            raise HTTPException(
+                detail="User is not verified", status_code=status.HTTP_403_FORBIDDEN
+            )
         if user.is_deleted:
-            raise HTTPException(detail="User has been deleted", status_code=403)
-        
+            raise HTTPException(
+                detail="User has been deleted", status_code=status.HTTP_403_FORBIDDEN
+            )
+
         return True
 
     def hash_password(self, password: str) -> str:
@@ -261,17 +269,11 @@ class UserService(Service):
     def create_refresh_token(self, db: Session, user_id: str) -> str:
         """Function to create refresh token"""
 
-        try:
-            expires = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
-                days=settings.JWT_REFRESH_EXPIRY
-            )
-            data = {"user_id": user_id, "exp": expires, "type": "refresh"}
-            encoded_jwt = jwt.encode(data, settings.SECRET_KEY, settings.ALGORITHM)
-
-        except Exception as exc:
-            raise HTTPException(
-                status_code=500, detail="Failed to generate user access token"
-            ) from exc
+        expires = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
+            days=settings.JWT_REFRESH_EXPIRY
+        )
+        data = {"sub": user_id, "exp": expires, "type": "refresh"}
+        encoded_jwt = jwt.encode(data, settings.SECRET_KEY, settings.ALGORITHM)
 
         try:
             refresh_token = RefreshToken(
@@ -284,6 +286,14 @@ class UserService(Service):
                 status_code=500, detail="Failed to save refresh token"
             ) from exc
 
+        # try:
+        #     data["_id"] = refresh_token.id
+        #     encoded_jwt = jwt.encode(data, settings.SECRET_KEY, settings.ALGORITHM)
+        # except Exception as exc:
+        #     raise HTTPException(
+        #         status_code=500, detail="Failed to generate user refresh token"
+        #     ) from exc
+
         return encoded_jwt
 
     def verify_access_token(self, access_token: str, credentials_exception):
@@ -293,7 +303,7 @@ class UserService(Service):
             payload = jwt.decode(
                 access_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
             )
-            user_id = payload.get("user_id")
+            user_id = payload.get("sub")
             token_type = payload.get("type")
 
             if user_id is None:
@@ -305,7 +315,6 @@ class UserService(Service):
             token_data = AccessTokenData(id=user_id)
 
         except JWTError as err:
-            print(err)
             raise credentials_exception
 
         return token_data
@@ -317,7 +326,7 @@ class UserService(Service):
             payload = jwt.decode(
                 refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
             )
-            user_id = payload.get("user_id")
+            user_id = payload.get("sub")
             token_type = payload.get("type")
 
             if user_id is None:
@@ -384,19 +393,34 @@ class UserService(Service):
             return (access, refresh)
 
     def get_current_user(
-        self, access_token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+        self, access_token: str = Security(oauth2_scheme), db: Session = Depends(get_db)
     ) -> User:
-        """Function to get current logged in user"""
+        """
+        Function to get current logged in user
+        request will fail if user is deactivated or deleted
+        """
+        try:
+            credentials_exception = HTTPException(
+                status_code=401,
+                detail="Could not validate credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
-        credentials_exception = HTTPException(
-            status_code=401,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+            token = self.verify_access_token(access_token, credentials_exception)
+            user = db.query(User).filter(User.id == token.id).first()
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="User does not exist"
+                )
 
-        token = self.verify_access_token(access_token, credentials_exception)
-        user = db.query(User).filter(User.id == token.id).first()
-
+            # check user status, will raise error if user status is negative
+            self.perform_user_check(user=user)
+        except HTTPException as exc:
+            return JsonResponseDict(
+                message="Failed to validate user",
+                error=exc.detail,
+                status_code=exc.status_code,
+            )
         return user
 
     def deactivate_user(
