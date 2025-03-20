@@ -14,7 +14,16 @@ class ProbeServerResponse(BaseModel):
 
 class Author(BaseModel):
     """Site Author"""
+
     author: Dict[str, str]
+
+
+class HomeRespData(BaseModel):
+    """Data for the Home Response Model"""
+
+    author: dict = {}
+    URL: str = "Home URL"
+
 
 class HomeResponse(BaseModel):
     """
@@ -22,5 +31,5 @@ class HomeResponse(BaseModel):
     """
 
     message: str
-    data: Union[Author, Dict[str, str]] = {"author": {}, "URL": "Site Url"}
+    data: HomeRespData
     status_code: int = 200
