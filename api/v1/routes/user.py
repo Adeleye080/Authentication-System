@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status, Depends, HTTPException
+from fastapi import APIRouter, status, Depends, HTTPException, Security
 from uuid import UUID
 from sqlalchemy.orm import Session
 from db.database import get_db
@@ -59,7 +59,10 @@ async def create_new_auth_user(request: UserCreate, db: Session = Depends(get_db
     tags=["Moderator", "Admin"],
 )
 async def get_all_auth_users(
-    page: int = 1, per_page: int = 10, db: Session = Depends(get_db)
+    page: int = 1,
+    per_page: int = 10,
+    db: Session = Depends(get_db),
+    user: User = Depends(user_service.get_current_user),
 ):
     """
     Retrieves all Auth users, typically to admins or moderators.
@@ -68,6 +71,8 @@ async def get_all_auth_users(
 
     - **Note:** Both **active**, **deleted** and **verified** users would be returned
     """
+
+    # perform operation to check is current user is admin
 
     page = max(page, 1)
     per_page = max(per_page, 1)
@@ -151,39 +156,34 @@ async def get_active_and_verified_auth_users(
 
 
 @user_router.get(
-    "/{user_id}",
+    "/me",
     response_model=UserResponseModel,
     status_code=status.HTTP_200_OK,
     tags=["User"],
 )
-async def get_an_auth_user(user_id: UUID, db: Session = Depends(get_db)):
+async def get_an_auth_user(
+    user: User = Depends(user_service.get_current_user),
+):
     """
     Retrieve an Auth user, typically to superadmin.
     """
 
-    user_id = str(user_id)
-    try:
-        user = check_model_existence(db=db, model=User, id=user_id)
-    except HTTPException as exc:
-        return JsonResponseDict(
-            message="failed to get user from the system",
-            error=exc.detail,
-            status_code=exc.status_code,
-        )
-
-    return user.to_dict()
+    return JsonResponseDict(
+        message="Retrieve user successfully",
+        data=user.to_dict(),
+        status_code=status.HTTP_200_OK,
+    )
 
 
 @user_router.patch(
-    "/{user_id}",
+    "/me",
     response_model=UserUpdateResponseModel,
     status_code=status.HTTP_200_OK,
     tags=["User"],
 )
 async def patch_auth_user(
-    user_id: UUID,
     data: UserUpdateSchema,
-    db: Session = Depends(get_db),
+    user: User = Depends(user_service.get_current_user),
 ):
     """Update Auth user data"""
 
@@ -215,13 +215,15 @@ async def patch_auth_user(
 
 
 @user_router.delete(
-    "/{user_id}/me",
+    "/me",
     response_model=UserResponseModel,
     status_code=status.HTTP_200_OK,
     summary="Deletes a user",
     tags=["User"],
 )
-async def soft_delete_auth_user(user_id: UUID, db: Session = Depends(get_db)):
+async def soft_delete_auth_user(
+    user: User = Depends(user_service.get_current_user),
+):
     """
     CAUTION!!
 
