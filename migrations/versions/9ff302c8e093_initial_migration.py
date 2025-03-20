@@ -58,6 +58,12 @@ def upgrade():
         sa.Column(
             "role", sa.Enum(RoleEnum), server_default=RoleEnum.USER, nullable=False
         ),
+        sa.Column(
+            "login_initiated",
+            sa.Boolean,
+            server_default=sa.text("false"),
+            nullable=False,
+        ),
         sa.Column("last_login", sa.DateTime, nullable=True),
         sa.Column("login_source", sa.Enum(LoginSource), nullable=True),
         sa.Index("ix_user_email", "email"),
@@ -171,9 +177,6 @@ def downgrade():
     # Drop the refresh_tokens table
     op.drop_table("refresh_tokens")
 
-    # Drop the users table
-    op.drop_table("users")
-
     # Drop the enum type (only needed for PostgreSQL)
     if op.get_context().dialect.name == "postgresql":
         op.execute("DROP TYPE IF EXISTS roleenum")
@@ -183,3 +186,6 @@ def downgrade():
 
     # Drop the user_devices table
     op.drop_table("user_devices")
+
+    # Drop the users table
+    op.drop_table("users")
