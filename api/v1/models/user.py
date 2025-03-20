@@ -22,7 +22,7 @@ class User(BaseModel):
     last_login = Column(DateTime, nullable=True)
     login_source = Column(Enum(LoginSource), nullable=True)
     refresh_tokens = relationship("RefreshToken", back_populates="user", uselist=True)
-    devices = relationship("UserDevice", backref="user", uselist=True)
+    devices = relationship("Device", backref="user", uselist=True)
 
     __table_args__ = (
         Index("ix_user_email", "email"),
