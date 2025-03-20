@@ -1,11 +1,10 @@
 from fastapi import HTTPException, Depends, Request, status
 from fastapi.security import OAuth2PasswordBearer
-
 from passlib.context import CryptContext  # type: ignore
 from typing import Tuple, Optional, List
 from sqlalchemy.orm import Session
 import datetime as dt
-from jose import JWTError, jwt
+from jose import JWTError, jwt, ExpiredSignatureError
 from sqlalchemy import func
 from db.database import get_db
 
@@ -228,6 +227,10 @@ class UserService(Service):
             raise HTTPException(detail="User is not active", status_code=403)
         if not user.is_verified:
             raise HTTPException(detail="User is not verified", status_code=403)
+        if user.is_deleted:
+            raise HTTPException(detail="User has been deleted", status_code=403)
+        
+        return True
 
     def hash_password(self, password: str) -> str:
         """Function to hash a password"""
@@ -256,7 +259,7 @@ class UserService(Service):
         return encoded_jwt
 
     def create_refresh_token(self, db: Session, user_id: str) -> str:
-        """Function to create access token"""
+        """Function to create refresh token"""
 
         try:
             expires = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
@@ -270,11 +273,17 @@ class UserService(Service):
                 status_code=500, detail="Failed to generate user access token"
             ) from exc
 
-        refresh_token = RefreshToken(
-            token=encoded_jwt, user_id=user_id, expires_at=expires
-        )
-        db.add(refresh_token)
-        db.commit()
+        try:
+            refresh_token = RefreshToken(
+                token=encoded_jwt, user_id=user_id, expires_at=expires
+            )
+            db.add(refresh_token)
+            db.commit()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500, detail="Failed to save refresh token"
+            ) from exc
+
         return encoded_jwt
 
     def verify_access_token(self, access_token: str, credentials_exception):
@@ -319,10 +328,44 @@ class UserService(Service):
 
             token_data = AccessTokenData(id=user_id)
 
-        except JWTError:
-            raise credentials_exception
+        except ExpiredSignatureError as exc:
+            raise credentials_exception from exc
+        except JWTError as exc:
+            raise HTTPException(
+                status_code=400, detail="error verifying and decoding refresh token"
+            ) from exc
 
         return token_data
+
+    def revoke_refresh_token(self, db: Session, token: str):
+        """Function to revoke refresh token"""
+
+        if not token:
+            raise HTTPException(status_code=400, detail="No token provided")
+
+        try:
+            payload = jwt.decode(
+                token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+            )
+            token_id = payload.get("_id")
+
+            if token_id is None:
+                raise HTTPException(400, "Invalid token")
+
+        except JWTError as exc:
+            raise HTTPException(400, "Invalid token") from exc
+
+        refresh_token = (
+            db.query(RefreshToken).filter(RefreshToken.id == token_id).first()
+        )
+
+        if not refresh_token:
+            raise HTTPException(400, "Invalid token")
+
+        refresh_token.revoked = True
+        db.commit()
+        db.refresh(refresh_token)
+        return True
 
     def refresh_access_token(self, current_refresh_token: str):
         """Function to generate new access token and rotate refresh token"""
@@ -334,10 +377,11 @@ class UserService(Service):
         token = self.verify_refresh_token(current_refresh_token, credentials_exception)
 
         if token:
+            db: Session = Depends(get_db)
             access = self.create_access_token(user_id=token.id)
-            refresh = self.create_refresh_token(user_id=token.id)
+            refresh = self.create_refresh_token(db=db, user_id=token.id)
 
-            return access, refresh
+            return (access, refresh)
 
     def get_current_user(
         self, access_token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
