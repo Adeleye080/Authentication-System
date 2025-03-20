@@ -140,8 +140,8 @@ class UserID(BaseModel):
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
+    email: EmailStr = "user@AuthSystem.com"
+    password: str = "AuthUser12@"
 
 
 class UserData(BaseModel):
@@ -264,6 +264,13 @@ class LoginToken(BaseModel):
     acesss_token: str
     refresh_token: str
     scheme: str
+
+
+class SwaggerLoginToken(BaseModel):
+    """token schema for swagger docs"""
+
+    access_token: str
+    token_type: str
 
 
 class LoginDataSchema(BaseModel):
