@@ -7,7 +7,7 @@ from pydantic import (
     model_validator,
 )
 from datetime import datetime
-from typing import Annotated, List, Union, Optional, Dict
+from typing import Annotated, List, Union, Optional
 import re
 import dns.resolver
 from email_validator import validate_email, EmailNotValidError  # type: ignore
@@ -35,6 +35,17 @@ def validate_mx_record(domain: str):
     return True
 
 
+class LoginSource(str, PyEnum):
+    """Login sources"""
+
+    PASSWORD = "password"
+    GOOGLE = "google"
+    MAGICLINK = "magiclink"
+    FACEBOOK = "facebook"
+    GITHUB = "github"
+    TWITTER = "twitter"
+
+
 class UserResponseModel(BaseModel):
     """Auth User model"""
 
@@ -46,6 +57,8 @@ class UserResponseModel(BaseModel):
     is_deleted: bool = False
     created_at: datetime
     updated_at: datetime
+    last_login: Optional[datetime] = None
+    login_source: Optional[LoginSource] = None
 
     class Config:
         from_attributes = True
@@ -174,7 +187,7 @@ class AllUsersResponse(BaseModel):
     message: str
     status_code: int
     status: str = "success"
-    data: Union[List[UserData], List[None]]
+    data: Union[List[UserData]]
     pagination: HyperMedia
 
 
