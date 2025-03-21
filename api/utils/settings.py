@@ -25,11 +25,14 @@ class Settings(BaseSettings):
     DB_TYPE: str = config("DB_TYPE")
     DB_URL: str = config("DB_URL", default="0", cast=str)
 
-    # MAIL_USERNAME: str = config("MAIL_USERNAME")
-    # MAIL_PASSWORD: str = config("MAIL_PASSWORD")
-    # MAIL_FROM: str = config("MAIL_FROM")
-    # MAIL_PORT: int = config("MAIL_PORT")
-    # MAIL_SERVER: str = config("MAIL_SERVER")
+    # SMTP CONFIG
+    SMTP_SERVER: str = config("SMTP_SERVER", cast=str, default="smtp.gmail.com")
+    SMTP_PORT: int = config("SMTP_PORT", cast=int, default=587)
+    EMAIL_ADDRESS: str = config("EMAIL_ADDRESS")
+    EMAIL_PASSWORD: str = config("EMAIL_PASSWORD")
+    MJML_TEMPLATE_DIR: str = config(
+        "MJML_TEMPLATE_DIR", cast=str, default=f"{BASE_DIR}/mjml_mail_templates"
+    )
 
     # FLUTTERWAVE_SECRET: str = config("FLUTTERWAVE_SECRET")
 
