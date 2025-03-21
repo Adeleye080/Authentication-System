@@ -28,13 +28,12 @@ def upgrade():
     # CREATE USER TABLE AND INDEX
     op.create_table(
         "users",
-        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True, index=True),
         # use line below for postgres uuid
         # sa.Column("id", sa.UUID, primary_key=True),
-        sa.Column("email", sa.String(128), nullable=False, unique=True, index=True),
-        sa.Column(
-            "recovery_email", sa.String(128), nullable=True, unique=True, index=True
-        ),
+        sa.Column("username", sa.String(128), nullable=False, unique=True),
+        sa.Column("email", sa.String(128), nullable=False, unique=True),
+        sa.Column("recovery_email", sa.String(128), nullable=True, unique=True),
         sa.Column("password", sa.String(256), nullable=False),
         sa.Column(
             "is_active", sa.Boolean, nullable=False, server_default=sa.text("false")
@@ -66,6 +65,7 @@ def upgrade():
         ),
         sa.Column("last_login", sa.DateTime, nullable=True),
         sa.Column("login_source", sa.Enum(LoginSource), nullable=True),
+        sa.Index("ix_user_username", "username"),
         sa.Index("ix_user_email", "email"),
         sa.Index("ix_user_recovery_email", "recovery_email"),
         sa.Index("ix_user_role", "role"),
@@ -79,7 +79,7 @@ def upgrade():
     # REFRESH TOKEN TABLE AND INDEX
     op.create_table(
         "refresh_tokens",
-        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True, index=True),
         sa.Column(
             "user_id",
             sa.String(36),
@@ -140,7 +140,7 @@ def upgrade():
 
     op.create_table(
         "user_devices",
-        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True, index=True),
         sa.Column(
             "user_id",
             sa.String(36),
