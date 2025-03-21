@@ -23,7 +23,7 @@
     <!-- Header -->
     <mj-section padding="20px 0">
       <mj-column>
-        <mj-image width="200px" src="https://www.yourdomain.com/logo.png" alt="Logo" />
+        <mj-image width="200px" src="{{companyLogoUrl}}" alt="Logo" />
       </mj-column>
     </mj-section>
 
@@ -34,7 +34,7 @@
           Your Magic Login Link
         </mj-text>
         <mj-text>
-          Hello {{name}},
+          Hello {{username}},
         </mj-text>
         <mj-text padding-bottom="20px">
           We received a request to log in to your account. Click the button below to securely log in without entering your password:
@@ -43,7 +43,7 @@
           Log In Securely
         </mj-button>
         <mj-text font-size="14px" padding-top="20px">
-          This link will expire in 10 minutes and can only be used once.
+          This link will expire in 10 minutes and can only be used once. If the button above does not work, copy the link below into your browser.
         </mj-text>
         <mj-text font-size="14px" color="#4A90E2" padding-bottom="20px">
           {{magicLink}}
@@ -58,7 +58,7 @@
     <mj-section padding-top="20px" border-top="1px solid #eeeeee">
       <mj-column>
         <mj-text font-size="12px" color="#888888" align="center">
-          &copy; {{currentYear}} [Your Company Name]. All rights reserved.
+          &copy; {{currentYear}} {{companyName}}. All rights reserved.
         </mj-text>
         <mj-text font-size="12px" color="#888888" align="center" padding-top="10px">
           <a href="{{termsUrl}}" class="footer-link">Terms of Service</a> |
@@ -66,7 +66,7 @@
           <a href="{{unsubscribeUrl}}" class="footer-link">Unsubscribe</a>
         </mj-text>
         <mj-text font-size="12px" color="#888888" align="center" padding-top="10px">
-          [Your Company Address]
+          {{companyAddress}}
         </mj-text>
       </mj-column>
     </mj-section>
