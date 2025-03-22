@@ -34,7 +34,7 @@
           Verify Your Email Address
         </mj-text>
         <mj-text>
-          Hello {{name}},
+          Hello {{username}},
         </mj-text>
         <mj-text padding-bottom="10px">
           Thanks for creating an account with [Your Service]. To complete your registration, we need to verify your email address.
