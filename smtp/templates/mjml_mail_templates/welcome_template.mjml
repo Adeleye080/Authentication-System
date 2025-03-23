@@ -23,7 +23,7 @@
     <!-- Header -->
     <mj-section padding="20px 0">
       <mj-column>
-        <mj-image width="200px" src="{{companyLogoUrl}}" alt="Logo" />
+        <mj-image src=../img/logo.png alt="Logo" />
       </mj-column>
     </mj-section>
 
@@ -31,10 +31,10 @@
     <mj-section>
       <mj-column>
         <mj-text font-size="24px" font-weight="500" padding-bottom="20px">
-          Welcome to [Your Service]!
+          Welcome to {{companyName}}!
         </mj-text>
         <mj-text>
-          Hello {{name}},
+          Hello {{username}},
         </mj-text>
         <mj-text padding-bottom="10px">
           Thank you for creating an account with us. We're excited to have you on board!
@@ -59,8 +59,7 @@
         </mj-text>
         <mj-text font-size="12px" color="#888888" align="center" padding-top="10px">
           <a href="{{termsUrl}}" class="footer-link">Terms of Service</a> |
-          <a href="{{privacyUrl}}" class="footer-link">Privacy Policy</a> |
-          <a href="{{unsubscribeUrl}}" class="footer-link">Unsubscribe</a>
+          <a href="{{privacyUrl}}" class="footer-link">Privacy Policy</a>
         </mj-text>
         <mj-text font-size="12px" color="#888888" align="center" padding-top="10px">
           {{companyAddress}}

@@ -32,7 +32,7 @@
     <!-- Header -->
     <mj-section padding="20px 0">
       <mj-column>
-        <mj-image width="200px" src="{{companyLogoUrl}}" alt="Logo" />
+        <mj-image src=../img/logo.png alt="Logo" />
       </mj-column>
     </mj-section>
 
@@ -43,13 +43,14 @@
           Your Verification Code
         </mj-text>
         <mj-text>
-          Hello {{name}},
+          Hello {{username}},
         </mj-text>
         <mj-text padding-bottom="20px">
           Here is your two-factor authentication code:
         </mj-text>
+
         <mj-text css-class="code" align="center" padding-bottom="20px">
-          {{code}}
+          {{" ".join(str(code)) }}
         </mj-text>
         <mj-text padding-bottom="10px">
           This code will expire in 10 minutes.
@@ -74,8 +75,7 @@
         </mj-text>
         <mj-text font-size="12px" color="#888888" align="center" padding-top="10px">
           <a href="{{termsUrl}}" class="footer-link">Terms of Service</a> |
-          <a href="{{privacyUrl}}" class="footer-link">Privacy Policy</a> |
-          <a href="{{unsubscribeUrl}}" class="footer-link">Unsubscribe</a>
+          <a href="{{privacyUrl}}" class="footer-link">Privacy Policy</a>
         </mj-text>
         <mj-text font-size="12px" color="#888888" align="center" padding-top="10px">
           {{companyAddress}}
