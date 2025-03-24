@@ -23,7 +23,7 @@
     <!-- Header -->
     <mj-section padding="20px 0">
       <mj-column>
-        <mj-image src=../img/logo.png alt="Logo" />
+        <mj-image src={{companyLogoUrl}} alt="Logo" />
       </mj-column>
     </mj-section>
 
@@ -42,7 +42,7 @@
         <mj-text padding-bottom="20px">
           Please click the button below to verify your email address:
         </mj-text>
-        <mj-button background-color="#4A90E2" color="white" font-weight="500" border-radius="4px" href="{{verificationLink}}">
+        <mj-button background-color="#4A90E2" color="white" font-weight="500" border-radius="4px" href={{verificationLink}}>
           Verify My Email
         </mj-button>
         <mj-text font-size="14px" padding-top="20px">
@@ -64,8 +64,8 @@
           &copy; {{currentYear}} {{companyName}}. All rights reserved.
         </mj-text>
         <mj-text font-size="12px" color="#888888" align="center" padding-top="10px">
-          <a href="{{termsUrl}}" class="footer-link">Terms of Service</a> |
-          <a href="{{privacyUrl}}" class="footer-link">Privacy Policy</a>
+          <a href={{termsUrl}} class="footer-link">Terms of Service</a> |
+          <a href={{privacyUrl}} class="footer-link">Privacy Policy</a>
         </mj-text>
         <mj-text font-size="12px" color="#888888" align="center" padding-top="10px">
           {{companyAddress}}

@@ -23,7 +23,7 @@
     <!-- Header -->
     <mj-section padding="20px 0" padding-bottom="5px">
       <mj-column>
-        <mj-image src=../img/logo.png alt="Logo" />
+        <mj-image src={{companyLogoUrl}} alt="Logo" />
       </mj-column>
     </mj-section>
 
@@ -39,7 +39,7 @@
         <mj-text padding-bottom="20px">
           We received a request to log in to your account. Click the button below to securely log in without entering your password:
         </mj-text>
-        <mj-button background-color="#4A90E2" color="white" font-weight="500" border-radius="4px" href="{{magicLink}}">
+        <mj-button background-color="#4A90E2" color="white" font-weight="500" border-radius="4px" href={{magicLink}}>
           Log In Securely
         </mj-button>
         <mj-text font-size="14px" padding-top="20px">
@@ -61,8 +61,8 @@
           &copy; {{currentYear}} {{companyName}}. All rights reserved.
         </mj-text>
         <mj-text font-size="12px" color="#888888" align="center" padding-top="10px">
-          <a href="{{termsUrl}}" class="footer-link">Terms of Service</a> |
-          <a href="{{privacyUrl}}" class="footer-link">Privacy Policy</a>
+          <a href={{termsUrl}} class="footer-link">Terms of Service</a> |
+          <a href={{privacyUrl}} class="footer-link">Privacy Policy</a>
         </mj-text>
         <mj-text font-size="12px" color="#888888" align="center" padding-top="10px">
           {{companyAddress}}

@@ -23,7 +23,7 @@
     <!-- Header -->
     <mj-section padding="20px 0">
       <mj-column>
-        <mj-image src=../img/logo.png alt="Logo" />
+        <mj-image src={{companyLogoUrl}} alt="Logo" />
       </mj-column>
     </mj-section>
 
@@ -53,7 +53,7 @@
             <li>If you lose access to your verification method, you'll need your backup codes to log in</li>
           </ul>
         </mj-text>
-        <mj-button background-color="#4A90E2" color="white" font-weight="500" border-radius="4px" href="{{securitySettingsLink}}">
+        <mj-button background-color="#4A90E2" color="white" font-weight="500" border-radius="4px" href={{securitySettingsLink}}>
           Manage Security Settings
         </mj-button>
         <mj-text font-size="14px" color="#666666" padding-top="20px">
@@ -69,8 +69,8 @@
           &copy; {{currentYear}} {{companyName}}. All rights reserved.
         </mj-text>
         <mj-text font-size="12px" color="#888888" align="center" padding-top="10px">
-          <a href="{{termsUrl}}" class="footer-link">Terms of Service</a> |
-          <a href="{{privacyUrl}}" class="footer-link">Privacy Policy</a>
+          <a href={{termsUrl}} class="footer-link">Terms of Service</a> |
+          <a href={{privacyUrl}} class="footer-link">Privacy Policy</a>
         </mj-text>
         <mj-text font-size="12px" color="#888888" align="center" padding-top="10px">
           {{companyAddress}}
