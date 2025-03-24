@@ -1,10 +1,14 @@
 """Main App Module"""
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, status
+from fastapi import FastAPI, status, Request, HTTPException
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from api.v1.routes import api_version_one
 from api.v1.schemas.main import ProbeServerResponse, HomeResponse
+from api.core.logging.logging_config import setup_logging  # type: ignore
+from fastapi.templating import Jinja2Templates
 
 
 @asynccontextmanager
@@ -38,6 +42,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# LOGGING SETUP
+setup_logging()
+
+
+email_templates = Jinja2Templates(directory="smtp/templates/html_mail_templates")
 
 
 @app.get(
@@ -79,3 +90,38 @@ async def probe_server():
 
 
 app.include_router(api_version_one)
+
+
+# REGISTER EXCEPTION HANDLERS
+@app.exception_handler(HTTPException)
+async def http_exception(request: Request, exc: HTTPException):
+    """HTTP exception handler"""
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "status": "error",
+            "status_code": exc.status_code,
+            "message": exc.detail,
+        },
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception(request: Request, exc: RequestValidationError):
+    """Validation exception handler"""
+
+    errors = [
+        {"loc": error["loc"], "msg": error["msg"], "type": error["type"]}
+        for error in exc.errors()
+    ]
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "status": "error",
+            "status_code": 422,
+            "message": "Invalid input",
+            "errors": errors,
+        },
+    )
