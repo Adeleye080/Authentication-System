@@ -2,18 +2,25 @@ import time
 import logging
 from functools import wraps
 from typing import Callable
+from fastapi import Request
 
 
 logger = logging.getLogger(__name__)
 
 
 # Simple retry decorator
-def send_email_retry_on_failure(retries: int = 3, delay: int = 2):
+def send_email_retry_on_failure_with_fallback(
+    retries: int = 2, delay: int = 2, use_backup: bool = True
+):
     """
-    A decorator to retry the function call after a failure.
-    Arguments:
-    - retries: the number of retries (default is 3).
-    - delay: the delay between retries in seconds (default is 2).
+    A decorator to retry the FastAPI-Mail function call after a failure.
+
+    Falls back to Mail-Gun (if applicable) and traditional SMTPlib mail sending.
+
+    Params:
+    :param retries: the number of retries (default is 2).
+    :param delay: the delay between retries in seconds (default is 2).
+    :param use_backup: `Bool` Use the backup mail sending functions
     """
 
     def decorator(func: Callable):
@@ -26,49 +33,77 @@ def send_email_retry_on_failure(retries: int = 3, delay: int = 2):
                     return await func(*args, **kwargs)
                 except Exception as e:
                     attempt += 1
-                    logger.info(
-                        f"Attempt {attempt} failed: {e}. Retrying in {delay} seconds..."
-                    )
+                    logger.info(f"Resend attempt {attempt} failed: {e}.")
                     time.sleep(delay)  # Wait before retrying
-            # If all retries fail, raise the last exception
-            if "recipient" in kwargs:
-                r = kwargs.get("recipient")
-            if "subject" in kwargs:
-                s = kwargs.get("subject")
-            logger.exception(f"❌ failed to resend mail ({s}) to {r}")
+
+            if not use_backup:
+                from api.v1.services import audit_log_service
+                from api.v1.schemas.audit_logs import (
+                    AuditLogCreate,
+                    AuditLogEventEnum,
+                    AuditLogStatuses,
+                )
+
+                logger.info("All retries failed.")
+
+                recipient = kwargs["recipient"]
+                if len(recipient) > 36:
+                    recipient = recipient[:33] + "..."
+                log_description = f"Failed to send mail ({kwargs['subject']}) to {recipient} after {retries} attempts."
+                schema = AuditLogCreate(
+                    user_id=recipient,
+                    event=AuditLogEventEnum.MAIL_ERROR,
+                    description=log_description,
+                    ip_address=None,
+                    user_agent=None,
+                    status=AuditLogStatuses.FAILED,
+                )
+                audit_log_service.log_without_bgt(schema=schema)
+            else:
+                logger.info("All retries failed. Falling back to backup mail sender.")
+
+                recipient = kwargs["recipient"]
+                subject = kwargs["subject"]
+                template_name = kwargs["template_name"]
+                template_context = kwargs["template_context"]
+
+                from api.utils.settings import settings
+
+                if settings.MAILGUN_DOMAIN and settings.MAILGUN_API_KEY:
+                    from smtp.mailing import _send_email_mailgun_backup
+
+                    logger.info(
+                        f"Mail Gun Config found, Using Mail-Gun as backup to send ({subject}) mail to {recipient}."
+                    )
+
+                    try:
+                        _send_email_mailgun_backup(
+                            recipient=recipient,
+                            subject=subject,
+                            template_name=template_name,
+                            template_context=template_context,
+                        )
+                    except Exception as e:
+                        logger.exception(
+                            f"❌ Mailgun failed to resend mail ({subject}) to {recipient}, exception occured: {e}"
+                        )
+
+                else:
+                    from smtp.mailing import _send_email_smtp_backup
+
+                    # Extract necessary arguments to pass to the backup function
+                    try:
+                        _send_email_smtp_backup(
+                            recipient=recipient,
+                            subject=subject,
+                            template_name=template_name,
+                            template_context=template_context,
+                        )
+                    except Exception as e:
+                        logger.exception(
+                            f"❌ failed to resend mail ({subject}) to {recipient}, exception occured: {e}"
+                        )
 
         return wrapper
 
     return decorator
-
-
-# Logging decorator
-def log_email_activity(func):
-    """
-    Logs the email activity, including recipient, subject, and success/failure status.
-    """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        #     try:
-        #         to_email = (
-        #             kwargs.get("to_email") or args[0]
-        #         )  # Assuming first argument is `to_email`
-        #         subject = (
-        #             kwargs.get("subject") or args[1]
-        #         )  # Assuming second argument is `subject`
-
-        #         logging.info(
-        #             f"Attempting to send email to {to_email} with subject: {subject}"
-        #         )
-        #         result = func(*args, **kwargs)
-        #         logging.info(f"Email successfully sent to {to_email}")
-        #         return result
-        #     except Exception as e:
-        #         logging.error(
-        #             f"Failed to send email to {to_email} with subject: {subject}. Error: {e}"
-        #         )
-        #         raise
-
-        # return wrapper
-        pass
