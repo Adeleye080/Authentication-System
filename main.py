@@ -9,6 +9,7 @@ from api.v1.routes import api_version_one
 from api.v1.schemas.main import ProbeServerResponse, HomeResponse
 from api.core.logging.logging_config import setup_logging  # type: ignore
 from fastapi.templating import Jinja2Templates
+from api.utils.json_response import JsonResponseDict
 
 
 @asynccontextmanager
@@ -97,13 +98,10 @@ app.include_router(api_version_one)
 async def http_exception(request: Request, exc: HTTPException):
     """HTTP exception handler"""
 
-    return JSONResponse(
+    return JsonResponseDict(
         status_code=exc.status_code,
-        content={
-            "status": "error",
-            "status_code": exc.status_code,
-            "message": exc.detail,
-        },
+        message=exc.detail,
+        status="error",
     )
 
 
@@ -121,7 +119,6 @@ async def validation_exception(request: Request, exc: RequestValidationError):
         content={
             "status": "error",
             "status_code": 422,
-            "message": "Invalid input",
-            "errors": errors,
+            "message": f"Invalid input: {errors}",
         },
     )
