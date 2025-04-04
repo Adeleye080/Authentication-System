@@ -1,5 +1,6 @@
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
+from enum import Enum as PyEnum
 
 
 class AuditLogSchema(BaseModel):
@@ -21,3 +22,36 @@ class AuditLogSchema(BaseModel):
     )
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AuditLogCreate(BaseModel):
+    """Request schema for audit log"""
+
+    user_id: str = "related user id"
+    event: str
+    description: str
+    status: str
+    ip_address: Optional[str]
+    user_agent: Optional[str]
+    details: Optional[Dict] = {}
+
+
+class AuditLogEventEnum(str, PyEnum):
+    """All Available Audit Log Events"""
+
+    LOGIN = "USER LOGIN"
+    PASSWORD_CHANGE = "PASSWORD CHANGE"
+    PASSWORD_RESET = "PASSWORD RESET"
+    CREATE_ACCOUNT = "CREATE ACCOUNT"
+    REQUEST_VERIFICATION = "REQUEST_VERIFICATION"
+    UPDATE_ACCOUNT = "UPDATE ACCOUNT"
+    REQUEST_MAGIC_LINK = "REQUEST MAGIC LINK"
+    MAIL_ERROR = "ERROR PROCESSING/SENDING MAIL"
+
+
+class AuditLogStatuses(str, PyEnum):
+    """Log statuses"""
+
+    FAILED = "FAILED"
+    SUCCESS = "SUCCESS"
+    IN_BETWEEN = "SUCCESS BUT ERROR OCCURRED"
