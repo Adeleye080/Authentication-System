@@ -2,9 +2,10 @@ from fastapi import HTTPException, Depends, Request, status, Security
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext  # type: ignore
 from typing import Tuple, Optional, List, Annotated
+from pydantic import EmailStr
 from sqlalchemy.orm import Session
 import datetime as dt
-from jose import JWTError, jwt, ExpiredSignatureError
+from jose import JWTError, jwt, ExpiredSignatureError  # type: ignore
 from sqlalchemy import func
 from db.database import get_db
 
@@ -50,14 +51,15 @@ class UserService(Service):
             db.commit()
             db.refresh(user)
         except Exception as exc:
+            print(exc)
             raise HTTPException(status_code=500, detail="There was a database error")
 
         return user
 
-    def fetch(self, db: Session, schema: UserResponseModel):
+    def fetch(self, db: Session, email: EmailStr):
         """fetch a single user from the system"""
 
-        user = db.query(User).filter(User.email == schema.email).first()
+        user = db.query(User).filter(User.email == email).first()
         if not user:
             raise HTTPException(
                 status_code=404, detail="Auth user does not exist in our system!"
@@ -220,22 +222,26 @@ class UserService(Service):
         if not self.verify_password(password, user.password):
             raise HTTPException(status_code=400, detail="Invalid user credentials")
 
+        self.perform_user_check(user)
+
         return user
 
-    def perform_user_check(self, user: User):
+    def perform_user_check(self, user: User) -> bool:
         """This checks if a user is active and verified and not a deleted user"""
 
-        if not user.is_active:
-            raise HTTPException(
-                detail="User is not active", status_code=status.HTTP_403_FORBIDDEN
-            )
         if not user.is_verified:
             raise HTTPException(
-                detail="User is not verified", status_code=status.HTTP_403_FORBIDDEN
+                detail="User is not verified", status_code=status.HTTP_401_UNAUTHORIZED
+            )
+        if not user.is_active:
+            raise HTTPException(
+                detail="User is inactive or banned",
+                status_code=status.HTTP_403_FORBIDDEN,
             )
         if user.is_deleted:
             raise HTTPException(
-                detail="User has been deleted", status_code=status.HTTP_403_FORBIDDEN
+                detail="The account has been deleted. Please contact support if this is a mistake.",
+                status_code=status.HTTP_403_FORBIDDEN,
             )
 
         return True
@@ -285,14 +291,6 @@ class UserService(Service):
             raise HTTPException(
                 status_code=500, detail="Failed to save refresh token"
             ) from exc
-
-        # try:
-        #     data["_id"] = refresh_token.id
-        #     encoded_jwt = jwt.encode(data, settings.SECRET_KEY, settings.ALGORITHM)
-        # except Exception as exc:
-        #     raise HTTPException(
-        #         status_code=500, detail="Failed to generate user refresh token"
-        #     ) from exc
 
         return encoded_jwt
 
@@ -396,7 +394,8 @@ class UserService(Service):
         self, access_token: str = Security(oauth2_scheme), db: Session = Depends(get_db)
     ) -> User:
         """
-        Function to get current logged in user
+        Function to get current logged in user.
+
         request will fail if user is deactivated or deleted
         """
         try:
@@ -444,12 +443,6 @@ class UserService(Service):
         # Create reactivation token
         token = self.create_access_token(user_id=user.id)
         reactivation_link = f"https://{request.url.hostname}/api/v1/users/accounts/reactivate?token={token}"
-
-        # mail_service.send_mail(
-        #     to=user.email,
-        #     subject='Account deactivation',
-        #     body=f'Hello, {user.first_name},\n\nYour account has been deactivated successfully.\nTo reactivate your account if this was a mistake, please click the link below:\n{request.url.hostname}/api/users/accounts/reactivate?token={token}\n\nThis link expires after 15 minutes.'
-        # )
 
         db.commit()
 
