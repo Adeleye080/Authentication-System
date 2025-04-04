@@ -4,20 +4,53 @@ Handles user login, logout and refresh token routes
 """
 
 from typing import Annotated
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Depends,
+    status,
+    Request,
+    BackgroundTasks,
+    Query,
+    Path,
+    Body,
+)
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+import logging
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from api.v1.schemas.user import UserLogin, LoginResponseModel, SwaggerLoginToken
-from api.v1.services import user_service
+from db.database import get_db
+from api.v1.schemas.user import (
+    UserLogin,
+    LoginResponseModel,
+    SwaggerLoginToken,
+    EmailStr,
+)
+from api.v1.schemas.audit_logs import (
+    AuditLogCreate,
+    AuditLogEventEnum,
+    AuditLogStatuses,
+)
+from api.v1.schemas.user import LoginSource, GeneralResponse
 from api.utils.json_response import JsonResponseDict
 from api.utils.responses import auth_response
-from db.database import get_db
+from api.utils.user_device_agent import get_device_info
+from api.utils.settings import settings
+from api.v1.models.user import User
+from api.v1.services import (
+    user_service,
+    audit_log_service,
+    devices_service,
+    notification_service,
+)
+from smtp.mailing import send_mail
 
 
 auth_router = APIRouter(tags=["Auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/swagger-login")
+logger = logging.getLogger(__name__)
 
 
 @auth_router.post(
@@ -39,9 +72,6 @@ async def login(data: UserLogin, db: Session = Depends(get_db)):
             db=db, email=data.email, password=data.password
         )
 
-        # check user status (active, deleted, ...)
-        user_service.perform_user_check(user=user)
-
         # convert user object to dictionary
         user_profile = user.to_dict()
     except HTTPException as exc:
@@ -55,6 +85,10 @@ async def login(data: UserLogin, db: Session = Depends(get_db)):
         # generate user tokens
         user_access_token = user_service.create_access_token(user_id=user.id)
         user_refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
+        # set and save user login source and time
+        user.login_source = LoginSource.PASSWORD
+        user.last_login = datetime.now(timezone.utc)
+        user.save(db)
     except HTTPException as exc:
         return JsonResponseDict(
             message="Login Operation failed",
@@ -102,51 +136,44 @@ async def login_in_openapi_swagger(
 
 
 @auth_router.post(
-    "/magic-link-login",
-    response_model=LoginResponseModel,
+    "/request-magic-link",
+    response_model=GeneralResponse,
     status_code=status.HTTP_200_OK,
 )
-async def magic_link_login(data: UserLogin, db: Session = Depends(get_db)):
+async def magic_link_login(
+    request: Request,
+    bgt: BackgroundTasks,
+    email: EmailStr = Body(..., description="valid user email"),
+    db: Session = Depends(get_db),
+):
     """Logs client in using magic link"""
 
-    try:
-        user = user_service.authenticate_user(
-            db=db, email=data.email, password=data.password
-        )
+    user = user_service.fetch(db, email)
+    user_service.perform_user_check(user=user)
 
-        # perform logic to check if user is active
-        # perform logic to check if user is banned
+    # send magic link mail to user
+    link = notification_service.send_magic_link_mail(user=user, bgt=bgt)
 
-        # convert user object to dictionary
-        user_profile = user.to_dict()
-    except HTTPException as exc:
-        return JsonResponseDict(
-            message="Could not authenticate user",
-            error=exc.detail,
-            status_code=exc.status_code,
-        )
-
-    try:
-        # generate user tokens
-        user_access_token = user_service.create_access_token(user_id=user.id)
-        user_refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
-    except HTTPException as exc:
-        return JsonResponseDict(
-            message="Login Operation failed",
-            error=exc.detail,
-            status_code=exc.status_code,
-        )
-
-    # perform other logic such as setting cookies
     # loging the event in audit logs
+    device_info = await get_device_info(request)  # capture user device
+    audit_log_service.log(
+        db=db,
+        schema=AuditLogCreate(
+            user_id=user.id,
+            event=AuditLogEventEnum.REQUEST_MAGIC_LINK,
+            description="User requested magic link",
+            status=AuditLogStatuses.SUCCESS,
+            ip_address=device_info.get("ip_address"),
+            user_agent=device_info.get("user_agent"),
+        ),
+        background_task=bgt,
+    )
 
-    return auth_response(
-        status="success",
-        status_code=200,
-        message="Login was successful",
-        user_data=user_profile,
-        refresh_token=user_refresh_token,
-        access_token=user_access_token,
+    return JsonResponseDict(
+        message="Magic link has been sent to your email",
+        status_code=status.HTTP_200_OK,
+        # for testing
+        data={"magic_link": link},
     )
 
 
@@ -176,26 +203,32 @@ async def logout(refresh_token: str, db: Session = Depends(get_db)):
 async def refresh(refresh_token: str):
     """Refreshes user token"""
 
-    # get user id from token
-    # perform logic to check if user is active
-    # perform logic to check if user is banned
+    from jose import jwt  # type: ignore
 
-    # generate user tokens
-    access_tk, refresh_tk = user_service.refresh_access_token(
-        current_refresh_token=refresh_token
+    payload = jwt.decode(
+        refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
     )
 
-    # perform other logic such as setting cookies
-    # loging the event in audit logs
+    user = User.get_by_id(id=payload.get("sub"))
 
-    return JsonResponseDict(
-        message="Token refreshed",
-        status_code=200,
-        data={
-            "access": access_tk,
-            "refresh": refresh_tk,
-        },
-    )
+    if user_service.perform_user_check(user=user):
+
+        # generate user tokens
+        access_tk, refresh_tk = user_service.refresh_access_token(
+            current_refresh_token=refresh_token
+        )
+
+        # perform other logic such as setting cookies
+        # loging the event in audit logs
+
+        return JsonResponseDict(
+            message="Token refreshed",
+            status_code=200,
+            data={
+                "access": access_tk,
+                "refresh": refresh_tk,
+            },
+        )
 
 
 # PASSWORD RELATED ENDPOINTS
@@ -224,23 +257,49 @@ async def reset_password(token: str, new_password: str):
     summary="Endpoint to change user password",
     status_code=status.HTTP_200_OK,
 )
-async def change_password(old_password: str, new_password: str):
+async def change_password(
+    old_password: str,
+    new_password: str,
+    user: User = Depends(user_service.get_current_user),
+):
     """Change user password"""
     pass
 
 
-# EMAIL VERIFICATION
+# EMAIL VERIFICATION ENDPOINTS
 
 
 @auth_router.post(
-    "/verify-email/{token}",
+    "/verify-email",
     summary="Endpoint to verify user email.",
     status_code=status.HTTP_200_OK,
 )
-async def verify_email(token: str):
-    """Verifies user email"""
+async def verify_email(
+    token: str = Query(..., description="verification token"),
+    db: Session = Depends(get_db),
+):
+    """Verifies user email/account"""
+    from api.utils.encrypters_and_decrypters import decrypt_verification_token  # type: ignore
 
-    # perform logic to verify email
+    user_email = decrypt_verification_token(token)
+
+    user = user_service.fetch(db=db, email=user_email)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User does not exist"
+        )
+
+    # Check if user is already verified
+    if user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Email is already verified."
+        )
+
+    # verify and activate user
+    user.is_verified = True
+    user.is_active = True
+    user.save(db=db)
+
     # loging the event in audit logs
 
     return JsonResponseDict(
@@ -254,13 +313,53 @@ async def verify_email(token: str):
     summary="Endpoint to resend email verification",
     status_code=status.HTTP_200_OK,
 )
-async def resend_verification(token: str):
-    """Verifies user email"""
+async def resend_verification(
+    request: Request,
+    bgt: BackgroundTasks,
+    email: EmailStr = Query(..., description="User Email"),
+    db: Session = Depends(get_db),
+):
+    """Request for new user email verification"""
 
     # perform logic to resend email verification
+    user = user_service.fetch(db=db, email=email)
+
+    # Check if user is already verified
+    if user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Email is already verified."
+        )
+
+    # send verification mail to user
+    notification_service.send_verify_email_mail(user=user, bgt=bgt)
+
+    # capture user device
+    device_info = await get_device_info(request)
+
     # loging the event in audit logs
+    log_description = "User requested email verification link"
+    try:
+        schema = AuditLogCreate(
+            user_id=user.id,
+            event=AuditLogEventEnum.REQUEST_VERIFICATION,
+            description=log_description,
+            ip_address=device_info.get("ip_address"),
+            user_agent=device_info.get("user_agent"),
+            status=AuditLogStatuses.SUCCESS,
+        )
+        audit_log_service.log(db=db, schema=schema, background_task=bgt)
+
+        # log to logger
+        logger.info(
+            f"Audit Log {user.username} ({user.email}) request for verification email"
+        )
+
+    except Exception as exc:
+        logger.info(
+            f"Failed to Audit Log {user.username} ({user.email}) request for verification email, error {exc}"
+        )
 
     return JsonResponseDict(
-        message="Email verified",
+        message=f"verifcation email has been sent to {user.email}",
         status_code=200,
     )
