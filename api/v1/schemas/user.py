@@ -22,16 +22,16 @@ def validate_mx_record(domain: str):
     """
     Validate mx records for email
     """
-    # try:
-    #     # Try to resolve the MX record for the domain
-    #     mx_records = dns.resolver.resolve(domain, "MX")
-    #     return True if mx_records else False
-    # except dns.resolver.NoAnswer:
-    #     return False
-    # except dns.resolver.NXDOMAIN:
-    #     return False
-    # except Exception:
-    #     return False
+    try:
+        # Try to resolve the MX record for the domain
+        mx_records = dns.resolver.resolve(domain, "MX")
+        return True if mx_records else False
+    except dns.resolver.NoAnswer:
+        return False
+    except dns.resolver.NXDOMAIN:
+        return False
+    except Exception:
+        return False
     return True
 
 
@@ -46,11 +46,21 @@ class LoginSource(str, PyEnum):
     TWITTER = "twitter"
 
 
+class OAuthProviders(BaseModel):
+    """OAuth providera"""
+
+    GOOGLE: str = "google"
+    FACEBOOK: str = "facebook"
+    GITHUB: str = "github"
+    TWITTER: str = "twitter"
+
+
 class UserResponseModel(BaseModel):
     """Auth User model"""
 
     id: str
     email: EmailStr
+    username: str
     recovery_email: Optional[EmailStr]
     is_active: bool = False
     is_verified: bool = False
@@ -82,6 +92,7 @@ class UserCreate(BaseModel):
         StringConstraints(min_length=8, max_length=64, strip_whitespace=True),
         Field(exclude=True),  # exclude confirm_password field
     ] = "AuthUser12@"
+    username: str = "uniqueUsername"
 
     @model_validator(mode="before")
     @classmethod
@@ -365,3 +376,11 @@ class DeactivateUserSchema(BaseModel):
 
     reason: Optional[str] = None
     confirmation: bool
+
+
+class GeneralResponse(BaseModel):
+    """schema for reponses"""
+
+    message: str
+    status_code: int = 200
+    status: str = "success"
