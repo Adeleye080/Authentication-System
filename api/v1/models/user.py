@@ -2,15 +2,13 @@ from sqlalchemy import Column, Boolean, String, Index, Enum, DateTime
 from sqlalchemy.orm import relationship
 from api.v1.models.base_model import BaseModel
 from api.v1.schemas.user import RoleEnum, LoginSource
-
-# call below line to ensure RefreshToken is found by mapper
-from api.v1.models.refresh_token import RefreshToken
-from api.v1.models.device import Device  # type: ignore
+from sqlalchemy.orm import Session
 
 
 class User(BaseModel):
     __tablename__ = "users"
 
+    username = Column(String(128), unique=True, nullable=False)
     email = Column(String(128), unique=True, nullable=False)
     recovery_email = Column(String(128), nullable=True)
     password = Column(String(256), nullable=False)
@@ -25,6 +23,7 @@ class User(BaseModel):
     devices = relationship("Device", backref="user", uselist=True)
 
     __table_args__ = (
+        Index("ix_user_username", "username"),
         Index("ix_user_email", "email"),
         Index("ix_user_recovery_email", "recovery_email"),
         Index("ix_user_role", "role"),
@@ -47,3 +46,9 @@ class User(BaseModel):
 
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email}, role={self.role})>"
+
+    def save(self, db: Session):
+        """save changes made to user object to database"""
+
+        db.add(self)
+        db.commit()
