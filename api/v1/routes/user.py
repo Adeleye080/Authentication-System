@@ -1,10 +1,11 @@
-from fastapi import APIRouter, status, Depends, HTTPException, Security
+from fastapi import APIRouter, status, Depends, HTTPException, Request, BackgroundTasks
 from uuid import UUID
 from sqlalchemy.orm import Session
 from db.database import get_db
 
 from api.utils.json_response import JsonResponseDict
 from api.v1.models.user import User
+from api.v1.models.audit_logs import AuditLog
 from api.v1.schemas.user import (
     UserCreate,
     UserResponseModel,
@@ -12,18 +13,25 @@ from api.v1.schemas.user import (
     UserUpdateResponseModel,
     AllUsersResponse,
 )
+from api.v1.schemas.audit_logs import (
+    AuditLogCreate,
+    AuditLogEventEnum,
+    AuditLogStatuses,
+)
 from api.utils.responses import all_users_response
 from api.v1.services import user_service
+from api.v1.services import devices_service
+from api.v1.services import audit_log_service
+from api.v1.services import notification_service
 from api.utils.validators import check_model_existence
+from api.utils.settings import settings
+from api.utils.user_device_agent import get_device_info
+from smtp.mailing import send_mail
+import logging
 
 
 user_router = APIRouter(prefix="/users")
-
-
-# PLEASE NOTE THAT ALL USER ID ARE TO BE GOTTEN FROM THE JWT TOKEN
-# AND NOT FROM THE URL PARAMS
-# THIS IS TO ENSURE THAT USERS CAN ONLY ACCESS THEIR OWN DATA
-# AND NOT OTHER USERS' DATA
+logger = logging.getLogger(__name__)
 
 
 @user_router.post(
@@ -32,18 +40,64 @@ user_router = APIRouter(prefix="/users")
     status_code=status.HTTP_201_CREATED,
     tags=["User"],
 )
-async def create_new_auth_user(request: UserCreate, db: Session = Depends(get_db)):
+async def create_new_auth_user(
+    request: Request,
+    data: UserCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     """
     Registers new user in the auth system
     """
 
+    from api.utils.encrypters_and_decrypters import generate_user_verification_token
+
     try:
-        new_user = user_service.create(db=db, schema=request)
+        new_user = user_service.create(db=db, schema=data)
     except HTTPException as exc:
         return JsonResponseDict(
             status_code=exc.status_code,
             error="Failed to create user",
             message=exc.detail,
+        )
+
+    # save user device info
+    device_info = await get_device_info(request)
+    if device_info:
+        user_device = devices_service.create(
+            db=db, owner=new_user, device_info=device_info
+        )
+
+    verification_link = f"{settings.FRONTEND_EMAIL_VERIFICATION_URL.strip('/')}?token={generate_user_verification_token(new_user.email)}"
+
+    # send verification mail to user
+    notification_service.send_verify_email_mail(
+        user=new_user, verification_link=verification_link, bgt=background_tasks
+    )
+
+    # log activities both for audit and normal logging
+    logger.info(f"Created new user: {new_user.username} <{new_user.email}>")
+
+    # Audit Log event
+    try:
+        schema = AuditLogCreate(
+            user_id=new_user.id,
+            event=AuditLogEventEnum.CREATE_ACCOUNT,
+            description="Created new auth user account",
+            ip_address=user_device.ip_address,
+            status=AuditLogStatuses.SUCCESS,
+            user_agent=user_device.user_agent,
+        )
+        audit_log_service.log(db=db, schema=schema, background_task=background_tasks)
+
+        # log to logger
+        logger.info(
+            f"Audit Log {new_user.username} ({new_user.email}) account creation"
+        )
+
+    except Exception as exc:
+        logger.info(
+            f"Failed to Audit Log {new_user.username} ({new_user.email}) creation, but seems account creation was successful"
         )
 
     return JsonResponseDict(
@@ -116,7 +170,10 @@ async def get_all_auth_users(
     tags=["Moderator", "Admin"],
 )
 async def get_active_and_verified_auth_users(
-    page: int = 1, per_page: int = 10, db: Session = Depends(get_db)
+    page: int = 1,
+    per_page: int = 10,
+    db: Session = Depends(get_db),
+    user: User = Depends(user_service.get_current_user),
 ):
     """
     Retrieves only **active** and **verified** Auth users from the system.
@@ -184,19 +241,9 @@ async def get_an_auth_user(
 async def patch_auth_user(
     data: UserUpdateSchema,
     user: User = Depends(user_service.get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Update Auth user data"""
-
-    user_id = str(user_id)
-
-    try:
-        user = check_model_existence(db=db, model=User, id=user_id)
-    except HTTPException as exc:
-        return JsonResponseDict(
-            message="failed to get user from the system",
-            error=exc.detail,
-            status_code=exc.status_code,
-        )
 
     try:
         updated_user = user_service.update(db=db, user_id=user.id, schema=data)
@@ -223,15 +270,13 @@ async def patch_auth_user(
 )
 async def soft_delete_auth_user(
     user: User = Depends(user_service.get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     CAUTION!!
 
     This endpoint deletes a user from the system
     """
-
-    user_id = str(user_id)
-    user = check_model_existence(db=db, model=User, id=user_id)
 
     try:
         user = user_service.delete(db=db, user_id=user.id)
@@ -246,13 +291,39 @@ async def soft_delete_auth_user(
 
 
 @user_router.delete(
-    "/{user_id}hardDelete",
+    "/delete",
+    response_model=UserResponseModel,
+    status_code=status.HTTP_200_OK,
+    summary="Deletes a user in the system",
+    tags=["Admin", "Moderator"],
+)
+def soft_delete_auth_user(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(user_service.get_current_user),
+):
+    """
+    Caution!!
+
+    This endpoint removes a user from the system totally
+    Only accessible to superadmins
+    """
+
+    pass
+
+
+@user_router.delete(
+    "/hard-delete",
     response_model=UserResponseModel,
     status_code=status.HTTP_200_OK,
     summary="Removes a user entirely from the system",
     tags=["Admin"],
 )
-def hard_delete_auth_user(user_id: UUID, db: Session = Depends(get_db)):
+def hard_delete_auth_user(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(user_service.get_current_user),
+):
     """
     Caution!!
 
