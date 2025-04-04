@@ -6,6 +6,8 @@ Handles all user device related operations in the database
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from api.v1.models.device import Device
+from api.v1.models.user import User
+from typing import Dict
 
 
 class DevicesService:
@@ -44,7 +46,7 @@ class DevicesService:
             )
         return devices
 
-    def create(self, db: Session, schema):
+    def create(self, db: Session, device_info: Dict, owner: User):
         """
         Create a new device
         """
@@ -52,18 +54,18 @@ class DevicesService:
         device_exists = (
             db.query(Device)
             .filter(
-                Device.device_id == schema.device_id,
-                Device.user_agent == schema.user_agent,
-                Device.device_name == schema.device_name,
+                Device.user_agent == device_info.get("user_agent"),
+                Device.device_name == device_info.get("device_name"),
+                Device.user_id == owner.id,
             )
             .first()
         )
         if device_exists:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Device already exists"
-            )
+            return
 
-        device = Device(**schema.model_dump())
+        device_info.update({"user_id": owner.id})
+
+        device = Device(**device_info)
         db.add(device)
         db.commit()
         db.refresh(device)
