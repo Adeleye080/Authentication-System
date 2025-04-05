@@ -85,3 +85,35 @@ def generate_magic_link_token(email: EmailStr, validity: int = 10):
     ).decode()
 
     return magic_link_token
+
+
+def decrypt_magic_link_token(token: str) -> EmailStr:
+    """
+    Decrypts and validates magic link token. Returns the user email address if valid.
+    """
+
+    try:
+        decoded_encrypted_data = base64.urlsafe_b64decode(token)
+        decrypted_data = cipher_suite.decrypt(decoded_encrypted_data).decode()
+        email, expiry_timestamp = decrypted_data.split("-")
+
+        # Validate the email and expiry timestamp
+        print(email, expiry_timestamp)
+        assert "@" in email, "Token is malformed."
+        assert expiry_timestamp is not None, "Token is missing important part"
+
+    except AssertionError as ase:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ase))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Token"
+        )
+
+    current_timestamp = datetime.now(timezone.utc).timestamp()
+
+    if current_timestamp > float(expiry_timestamp):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Token has expired"
+        )
+
+    return email
