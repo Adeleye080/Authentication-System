@@ -29,6 +29,7 @@ class BaseModel(Base):
 
     def to_dict(self):
         """returns a dictionary representation of the instance"""
+
         obj_dict = self.__dict__.copy()
         if obj_dict["_sa_instance_state"]:
             del obj_dict["_sa_instance_state"]
