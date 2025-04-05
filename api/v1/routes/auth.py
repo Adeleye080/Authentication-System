@@ -71,13 +71,10 @@ async def login(data: UserLogin, db: Session = Depends(get_db)):
         user = user_service.authenticate_user(
             db=db, email=data.email, password=data.password
         )
-
-        # convert user object to dictionary
-        user_profile = user.to_dict()
     except HTTPException as exc:
         return JsonResponseDict(
-            message="Could not authenticate user",
-            error=exc.detail,
+            status="failed",
+            message=exc.detail,
             status_code=exc.status_code,
         )
 
@@ -85,25 +82,24 @@ async def login(data: UserLogin, db: Session = Depends(get_db)):
         # generate user tokens
         user_access_token = user_service.create_access_token(user_id=user.id)
         user_refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
-        # set and save user login source and time
-        user.login_source = LoginSource.PASSWORD
-        user.last_login = datetime.now(timezone.utc)
-        user.save(db)
+
     except HTTPException as exc:
         return JsonResponseDict(
-            message="Login Operation failed",
-            error=exc.detail,
+            status="failed",
+            message=exc.detail,
             status_code=exc.status_code,
         )
 
     # perform other logic such as setting cookies
     # loging the event in audit logs
 
+    user.username  # load object attrs
+
     return auth_response(
         status="success",
         status_code=200,
         message="Login was successful",
-        user_data=user_profile,
+        user_data=user.to_dict(),
         refresh_token=user_refresh_token,
         access_token=user_access_token,
     )
@@ -136,11 +132,11 @@ async def login_in_openapi_swagger(
 
 
 @auth_router.post(
-    "/request-magic-link",
+    "/magic-link/request",
     response_model=GeneralResponse,
     status_code=status.HTTP_200_OK,
 )
-async def magic_link_login(
+async def request_magic_link_login(
     request: Request,
     bgt: BackgroundTasks,
     email: EmailStr = Body(..., description="valid user email"),
@@ -172,8 +168,39 @@ async def magic_link_login(
     return JsonResponseDict(
         message="Magic link has been sent to your email",
         status_code=status.HTTP_200_OK,
-        # for testing
+        # for testing, should be removed
         data={"magic_link": link},
+    )
+
+
+@auth_router.get(
+    "/magic-link/verify",
+    response_model=LoginResponseModel,
+    status_code=status.HTTP_200_OK,
+)
+async def magic_link_login(
+    token: str = Query(..., description="magic link token"),
+    db: Session = Depends(get_db),
+):
+    """verifies magic link token and logs user in"""
+
+    user = user_service.authenticate_user_with_magic_link(db, token)
+    # generate user tokens
+    user_access_token = user_service.create_access_token(user_id=user.id)
+    user_refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
+
+    # perform other logic such as setting cookies
+    # loging the event in audit logs
+
+    user.username  # essential to load the user object attributes. Possiblt python bug
+
+    return auth_response(
+        status="success",
+        status_code=200,
+        message="Login was successful",
+        user_data=user.to_dict(),
+        refresh_token=user_refresh_token,
+        access_token=user_access_token,
     )
 
 
