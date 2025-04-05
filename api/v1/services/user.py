@@ -19,6 +19,7 @@ from api.v1.schemas.user import (
     DeactivateUserSchema,
     UserUpdateSchema,
     RoleEnum,
+    LoginSource,
 )
 from api.core.base.services import Service
 from api.utils.validators import check_model_existence
@@ -212,7 +213,7 @@ class UserService(Service):
         return user
 
     def authenticate_user(self, db: Session, email: str, password: str):
-        """Function to authenticate a user"""
+        """Function to authenticate a user with password"""
 
         user = db.query(User).filter(User.email == email).first()
 
@@ -223,6 +224,28 @@ class UserService(Service):
             raise HTTPException(status_code=400, detail="Invalid user credentials")
 
         self.perform_user_check(user)
+
+        user.last_login = dt.datetime.now(dt.timezone.utc)
+        user.login_source = LoginSource.PASSWORD
+        user.save(db)
+
+        return user
+
+    def authenticate_user_with_magic_link(self, db: Session, magic_token: str) -> User:
+        """Function to authenticate a user with magic link"""
+
+        from api.utils.encrypters_and_decrypters import decrypt_magic_link_token
+
+        user_email = decrypt_magic_link_token(magic_token)
+        user = db.query(User).filter(User.email == user_email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User does not exist")
+
+        self.perform_user_check(user)
+
+        user.last_login = dt.datetime.now(dt.timezone.utc)
+        user.login_source = LoginSource.MAGICLINK
+        user.save(db=db)
 
         return user
 
