@@ -54,7 +54,11 @@ class JsonResponseDict(JSONResponse):
                 "status": self.status or "success",
                 "status_code": self.status_code,
             }
-            response_dict.pop("data", None) if self.data is None else None
+            (
+                response_dict.pop("data", None)
+                if self.data is None or self.data == {}
+                else None
+            )
             return response_dict
 
         elif self.status_code == 401:
@@ -62,6 +66,15 @@ class JsonResponseDict(JSONResponse):
                 "message": self.message,
                 "data": self.data,
                 "status": "unauthorized",
+                "status_code": self.status_code,
+            }
+            response_dict.pop("data", None)
+            return response_dict
+        elif self.status_code == 409:
+            response_dict = {
+                "message": self.message,
+                "data": self.data,
+                "status": "failed",
                 "status_code": self.status_code,
             }
             response_dict.pop("data", None)
