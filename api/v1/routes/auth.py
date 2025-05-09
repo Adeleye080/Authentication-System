@@ -15,11 +15,9 @@ from fastapi import (
     Path,
     Body,
 )
-from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
+
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import logging
-from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from db.database import get_db
 from api.v1.schemas.user import (
@@ -27,17 +25,21 @@ from api.v1.schemas.user import (
     LoginResponseModel,
     SwaggerLoginToken,
     EmailStr,
+    PasswordChangeRequest,
+    PasswordResetRequest,
+    MagicLinkToken,
+    MagicLinkRequest,
 )
 from api.v1.schemas.audit_logs import (
     AuditLogCreate,
     AuditLogEventEnum,
     AuditLogStatuses,
 )
-from api.v1.schemas.user import LoginSource, GeneralResponse
+from api.v1.schemas.user import GeneralResponse, RefreshTokenRequest
 from api.utils.json_response import JsonResponseDict
-from api.utils.responses import auth_response
-from api.utils.user_device_agent import get_device_info
 from api.utils.settings import settings
+from api.utils.responses import auth_response
+from api.utils.user_device_agent import get_device_info, get_client_ip
 from api.v1.models.user import User
 from api.v1.services import (
     user_service,
@@ -45,7 +47,6 @@ from api.v1.services import (
     devices_service,
     notification_service,
 )
-from smtp.mailing import send_mail
 
 
 auth_router = APIRouter(tags=["Auth"])
@@ -56,7 +57,12 @@ logger = logging.getLogger(__name__)
 @auth_router.post(
     "/login", response_model=LoginResponseModel, status_code=status.HTTP_200_OK
 )
-async def login(data: UserLogin, db: Session = Depends(get_db)):
+async def login(
+    request: Request,
+    data: UserLogin,
+    bgt: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     """Logs client in
 
     **Cient may be regular users, moderator of admin
@@ -78,9 +84,23 @@ async def login(data: UserLogin, db: Session = Depends(get_db)):
             status_code=exc.status_code,
         )
 
+    # check user 2fa status
+    if user.totp_device and user.totp_device.confirmed:
+        temp_token = user_service.create_and_encrypt_temp_login_token(
+            user_id=user.id, ip_address=get_client_ip(request)
+        )
+        user.login_initiated = True
+        user.save(db=db)
+        return JsonResponseDict(
+            message="Login initiated, Please provide OTP and your temporary token to complete login",
+            status_code=status.HTTP_202_ACCEPTED,
+            status="pending",
+            data={"requires_2fa": True, "temp_token": temp_token},
+        )
+
     try:
         # generate user tokens
-        user_access_token = user_service.create_access_token(user_id=user.id)
+        user_access_token = user_service.create_access_token(user_obj=user, db=db)
         user_refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
 
     except HTTPException as exc:
@@ -90,12 +110,9 @@ async def login(data: UserLogin, db: Session = Depends(get_db)):
             status_code=exc.status_code,
         )
 
-    # perform other logic such as setting cookies
-    # loging the event in audit logs
+    user.email  # load object attrs
 
-    user.username  # load object attrs
-
-    return auth_response(
+    response = auth_response(
         status="success",
         status_code=200,
         message="Login was successful",
@@ -103,6 +120,43 @@ async def login(data: UserLogin, db: Session = Depends(get_db)):
         refresh_token=user_refresh_token,
         access_token=user_access_token,
     )
+
+    # set cookies
+    if settings.ALLOW_AUTH_COOKIES:
+        response.set_cookie(
+            key="access_token",
+            value=user_access_token,
+            httponly=True,
+            secure=settings.AUTH_SECURE_COOKIES,
+            samesite=settings.AUTH_SAME_SITE,
+            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        )
+
+        response.set_cookie(
+            key="refresh_token",
+            value=user_refresh_token,
+            httponly=True,
+            secure=settings.AUTH_SECURE_COOKIES,
+            samesite=settings.AUTH_SAME_SITE,
+            expires=settings.JWT_REFRESH_EXPIRY,
+        )
+
+    # audit log
+    device_info = await get_device_info(request)
+    audit_log_service.log(
+        db=db,
+        background_task=bgt,
+        schema=AuditLogCreate(
+            user_id=user.id,
+            event=AuditLogEventEnum.LOGIN,
+            description="user logged in",
+            status=AuditLogStatuses.SUCCESS,
+            ip_address=device_info.get("ip_address"),
+            user_agent=device_info.get("user_agent"),
+        ),
+    )
+
+    return response
 
 
 @auth_router.post(
@@ -126,7 +180,7 @@ async def login_in_openapi_swagger(
         )
 
     if user_service.perform_user_check(user=user):
-        access_token = user_service.create_access_token(user_id=user.id)
+        access_token = user_service.create_access_token(user_obj=user, db=db)
 
     return SwaggerLoginToken(access_token=access_token, token_type="bearer")
 
@@ -139,19 +193,19 @@ async def login_in_openapi_swagger(
 async def request_magic_link_login(
     request: Request,
     bgt: BackgroundTasks,
-    email: EmailStr = Body(..., description="valid user email"),
+    email: MagicLinkRequest,
     db: Session = Depends(get_db),
 ):
-    """Logs client in using magic link"""
+    """Send magic link to user"""
 
-    user = user_service.fetch(db, email)
+    user = user_service.fetch(db, email.email)
     user_service.perform_user_check(user=user)
 
     # send magic link mail to user
     link = notification_service.send_magic_link_mail(user=user, bgt=bgt)
 
     # loging the event in audit logs
-    device_info = await get_device_info(request)  # capture user device
+    device_info = await get_device_info(request)
     audit_log_service.log(
         db=db,
         schema=AuditLogCreate(
@@ -168,33 +222,30 @@ async def request_magic_link_login(
     return JsonResponseDict(
         message="Magic link has been sent to your email",
         status_code=status.HTTP_200_OK,
-        # for testing, should be removed
-        data={"magic_link": link},
     )
 
 
-@auth_router.get(
+@auth_router.post(
     "/magic-link/verify",
     response_model=LoginResponseModel,
     status_code=status.HTTP_200_OK,
 )
 async def magic_link_login(
-    token: str = Query(..., description="magic link token"),
+    schema: MagicLinkToken,
     db: Session = Depends(get_db),
 ):
     """verifies magic link token and logs user in"""
 
-    user = user_service.authenticate_user_with_magic_link(db, token)
+    user = user_service.authenticate_user_with_magic_link(db, schema.token)
     # generate user tokens
-    user_access_token = user_service.create_access_token(user_id=user.id)
+    user_access_token = user_service.create_access_token(user_obj=user, db=db)
     user_refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
 
-    # perform other logic such as setting cookies
     # loging the event in audit logs
 
-    user.username  # essential to load the user object attributes. Possiblt python bug
+    user.email  # essential to load the user object attributes.
 
-    return auth_response(
+    response = auth_response(
         status="success",
         status_code=200,
         message="Login was successful",
@@ -203,59 +254,83 @@ async def magic_link_login(
         access_token=user_access_token,
     )
 
+    if settings.ALLOW_AUTH_COOKIES:
+        response.set_cookie(
+            key="access_token",
+            value=user_access_token,
+            httponly=True,
+            secure=settings.AUTH_SECURE_COOKIES,
+            samesite=settings.AUTH_SAME_SITE,
+            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        )
+
+        response.set_cookie(
+            key="refresh_token",
+            value=user_refresh_token,
+            httponly=True,
+            secure=settings.AUTH_SECURE_COOKIES,
+            samesite=settings.AUTH_SAME_SITE,
+            expires=settings.JWT_REFRESH_EXPIRY,
+        )
+
+    return response
+
 
 @auth_router.post("/logout", status_code=status.HTTP_200_OK)
-async def logout(refresh_token: str, db: Session = Depends(get_db)):
+async def logout(
+    refresh_token_schema: RefreshTokenRequest, db: Session = Depends(get_db)
+):
     """Logs user out of the system"""
 
-    refresh_token = refresh_token.get("refresh_token", None)
+    refresh_token = refresh_token_schema.refresh_token
     if refresh_token:
         try:
             user_service.revoke_refresh_token(db=db, token=refresh_token)
         except HTTPException as exc:
             return JsonResponseDict(
-                message="Could not revoke token",
-                error=exc.detail,
+                message=exc.detail,
+                status="failed",
                 status_code=exc.status_code,
             )
 
         # perform other logic such as clearing cookies
         # loging the event in audit logs
 
-        response = {"message": "Logout successful", "status_code": 200}
-        return JSONResponse(status_code=200, content=jsonable_encoder(response))
+        return JsonResponseDict(
+            message="Logout was successful",
+            status="success",
+            status_code=status.HTTP_200_OK,
+        )
+    else:
+        return JsonResponseDict(
+            message="Refresh token is required",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 @auth_router.post("/refresh", status_code=status.HTTP_200_OK)
-async def refresh(refresh_token: str):
+async def refresh(
+    refresh_token_schema: RefreshTokenRequest,
+    db: Session = Depends(get_db),
+):
     """Refreshes user token"""
 
-    from jose import jwt  # type: ignore
-
-    payload = jwt.decode(
-        refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+    new_access_token, new_refresh_token = user_service.refresh_access_token(
+        db, refresh_token_schema.refresh_token
     )
 
-    user = User.get_by_id(id=payload.get("sub"))
+    # perform other logic such as setting cookies
+    # loging the event in audit logs
 
-    if user_service.perform_user_check(user=user):
-
-        # generate user tokens
-        access_tk, refresh_tk = user_service.refresh_access_token(
-            current_refresh_token=refresh_token
-        )
-
-        # perform other logic such as setting cookies
-        # loging the event in audit logs
-
-        return JsonResponseDict(
-            message="Token refreshed",
-            status_code=200,
-            data={
-                "access": access_tk,
-                "refresh": refresh_tk,
-            },
-        )
+    return JsonResponseDict(
+        message="Token refreshed",
+        status="success",
+        status_code=status.HTTP_200_OK,
+        data={
+            "access": new_access_token,
+            "refresh": new_refresh_token,
+        },
+    )
 
 
 # PASSWORD RELATED ENDPOINTS
@@ -264,19 +339,65 @@ async def refresh(refresh_token: str):
     summary="Endpoint to request password reset",
     status_code=status.HTTP_200_OK,
 )
-async def forgot_password(email: str):
+async def forgot_password(
+    email: EmailStr, bgt: BackgroundTasks, db: Session = Depends(get_db)
+):
     """Request password reset"""
-    pass
+
+    user = user_service.fetch(db=db, email=email)
+
+    if user:
+        notification_service.send_password_reset_mail(user=user, bgt=bgt)
+
+    return JsonResponseDict(
+        message="If that email address exists in our system, you will receive a password reset link shortly.",
+        status_code=200,
+    )
 
 
 @auth_router.post(
-    "/reset-password/{token}",
+    "/reset-password",
     summary="Endpoint to reset user password",
     status_code=status.HTTP_200_OK,
 )
-async def reset_password(token: str, new_password: str):
+async def reset_password(
+    token: str = Query(..., description="Password reset token"),
+    data: PasswordResetRequest = Body(..., description="New Password"),
+    db: Session = Depends(get_db),
+):
     """Reset user password"""
-    pass
+
+    from api.utils.encrypters_and_decrypters import decrypt_password_reset_token
+
+    # decrypt token
+    user_email = decrypt_password_reset_token(token)
+
+    # check if user exists
+    user = user_service.fetch(db=db, email=user_email)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Auth user does not exist"
+        )
+
+    # Check user status
+    user_service.perform_user_check(user=user)
+    # change(reset) user password
+    access_token, refresh_token = user_service.change_password(
+        new_password=data.new_password, user=user, db=db, mode="reset"
+    )
+
+    # send notification to user
+
+    # loging the event in audit logs
+
+    return JsonResponseDict(
+        message="Password reset successful",
+        status_code=status.HTTP_200_OK,
+        data={
+            "access": access_token,
+            "refresh": refresh_token,
+        },
+    )
 
 
 @auth_router.post(
@@ -285,12 +406,36 @@ async def reset_password(token: str, new_password: str):
     status_code=status.HTTP_200_OK,
 )
 async def change_password(
-    old_password: str,
-    new_password: str,
+    data: PasswordChangeRequest,
     user: User = Depends(user_service.get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Change user password"""
-    pass
+
+    # Check if user is authenticated
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not authenticated",
+        )
+
+    # change user password
+    access_token, refresh_token = user_service.change_password(
+        new_password=data.new_password, old_password=data.old_password, user=user, db=db
+    )
+
+    # notify user of password change
+
+    # loging the event in audit logs
+
+    return JsonResponseDict(
+        message="Password changed successfully",
+        status_code=status.HTTP_200_OK,
+        data={
+            "access": access_token,
+            "refresh": refresh_token,
+        },
+    )
 
 
 # EMAIL VERIFICATION ENDPOINTS
@@ -306,7 +451,7 @@ async def verify_email(
     db: Session = Depends(get_db),
 ):
     """Verifies user email/account"""
-    from api.utils.encrypters_and_decrypters import decrypt_verification_token  # type: ignore
+    from api.utils.encrypters_and_decrypters import decrypt_verification_token
 
     user_email = decrypt_verification_token(token)
 
@@ -377,13 +522,11 @@ async def resend_verification(
         audit_log_service.log(db=db, schema=schema, background_task=bgt)
 
         # log to logger
-        logger.info(
-            f"Audit Log {user.username} ({user.email}) request for verification email"
-        )
+        logger.info(f"Audit Log ({user.email}) request for verification email")
 
     except Exception as exc:
         logger.info(
-            f"Failed to Audit Log {user.username} ({user.email}) request for verification email, error {exc}"
+            f"Failed to Audit Log ({user.email}) request for verification email, error {exc}"
         )
 
     return JsonResponseDict(
