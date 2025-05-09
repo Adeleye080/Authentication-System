@@ -35,6 +35,9 @@ class Settings(BaseSettings):
         "VERIFICATION_TOKEN_EXPIRATION_TIME", cast=int, default=600
     )  # 10 minutes
     JWT_REFRESH_EXPIRY: int = config("JWT_REFRESH_EXPIRY")
+    ALLOW_AUTH_COOKIES: bool = config("ALLOW_AUTH_COOKIES", cast=bool, default=True)
+    AUTH_SECURE_COOKIES: bool = config("SECURE_COOKIES", cast=bool, default=True)
+    AUTH_SAME_SITE: str = config("SAME_SITE", cast=str, default="None")
 
     # Database configurations
     DB_HOST: str = config("DB_HOST")
@@ -61,16 +64,27 @@ class Settings(BaseSettings):
     MAILGUN_API_KEY: str = config("MAILGUN_API_KEY")
     MAILGUN_DOMAIN: str = config("MAILGUN_DOMAIN")
 
-    # TWILIO_ACCOUNT_SID: str = config("TWILIO_ACCOUNT_SID")
-    # TWILIO_AUTH_TOKEN: str = config("TWILIO_AUTH_TOKEN")
-    # TWILIO_PHONE_NUMBER: str = config("TWILIO_PHONE_NUMBER")
+    # TWILIO SMS CONFIG
+    TWILIO_ACCOUNT_SID: str = config("TWILIO_ACCOUNT_SID")
+    TWILIO_AUTH_TOKEN: str = config("TWILIO_AUTH_TOKEN")
+    TWILIO_PHONE_NUMBER: str = config("TWILIO_PHONE_NUMBER")
 
     # APP INFO
     APP_NAME: str = config("APP_NAME", default="FASTAPI AUTH SYSTEM")
     APP_URL: str = config("APP_URL", default="fastapi-authsystem.example.com")
-    FRONTEND_EMAIL_VERIFICATION_URL: str = config("FRONTEND_EMAIL_VERIFICATION_URL")
+
+    FRONTEND_HOME_URL: str = config("FRONTEND_HOME_URL")
+    FRONTEND_EMAIL_VERIFICATION_URL: str = config(
+        "FRONTEND_EMAIL_VERIFICATION_URL",
+        default=f"{FRONTEND_HOME_URL.strip('/')}/auth/verify-email",
+    )
     FRONTEND_MAGIC_LINK_VERIFICATION_URL: str = config(
-        "FRONTEND_MAGIC_LINK_VERIFICATION_URL"
+        "FRONTEND_MAGIC_LINK_VERIFICATION_URL",
+        default=f"{FRONTEND_HOME_URL.strip('/')}/auth/magic-link/verify",
+    )
+    FRONTEND_PASSWORD_RESET_URL: str = config(
+        "FRONTEND_PASSWORD_RESET_URL",
+        default=f"{FRONTEND_HOME_URL.strip('/')}/reset-password",
     )
 
     ENCRYPTER_SECRET_KEY: str = config(
