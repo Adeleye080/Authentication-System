@@ -8,7 +8,7 @@ from api.v1.schemas.audit_logs import AuditLogEventEnum
 class AuditLog(Base):
     """Audit Log Model"""
 
-    __tablename__ = "audit_logs"
+    __tablename__ = "auth_audit_logs"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid7()))
     user_id = Column(String(36), nullable=False)
@@ -29,7 +29,6 @@ class AuditLog(Base):
         Index("ix_audit_log_status", "status"),
         Index("ix_audit_log_timestamp", "timestamp"),
         Index("ix_audit_log_user_ip_address", "ip_address"),
-        Index("ix_audit_log_user_agent_browser", "user_agent"),
     )
 
     def __repr__(self):
