@@ -26,7 +26,12 @@ class User(BaseModel):
 
     attributes = relationship("UserAttribute", backref="user", uselist=True)
 
-    refresh_tokens = relationship("RefreshToken", back_populates="user", uselist=True)
+    refresh_tokens = relationship(
+        "RefreshToken",
+        back_populates="user",
+        uselist=True,
+        cascade="all, delete-orphan",
+    )
     devices = relationship(
         "Device", backref="user", uselist=True, cascade="all, delete-orphan"
     )
