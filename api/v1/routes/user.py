@@ -118,7 +118,12 @@ async def get_all_auth_users(
     - **Note:** Both **active**, **deleted** and **verified** users would be returned
     """
 
-    # perform operation to check is current user is Superadmin
+    # perform operation to check is current user is Superadmin or moderator
+    if not any([user.is_superadmin, user.is_moderator]):
+        raise HTTPException(
+            detail="You are not authorized to access this resource",
+            status_code=status.HTTP_400_UNATHORIZED,
+        )
 
     page = max(page, 1)
     per_page = max(per_page, 1)
