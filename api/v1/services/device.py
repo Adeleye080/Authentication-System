@@ -23,7 +23,9 @@ class DevicesService:
         """
         devices = db.query(Device).all()
         if len(devices) == 0:
-            raise HTTPException(status_code=404, detail="No devices found!")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="No devices found!"
+            )
         return devices
 
     def get(self, db: Session, device_id: str):
@@ -32,7 +34,9 @@ class DevicesService:
         """
         device = db.query(Device).filter(Device.id == device_id).first()
         if not device:
-            raise HTTPException(status_code=404, detail="User device not found!")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User device not found!"
+            )
         return device
 
     def get_by_user_id(self, db: Session, user_id: str):
@@ -42,7 +46,8 @@ class DevicesService:
         devices = db.query(Device).filter(Device.user_id == user_id).all()
         if len(devices) == 0:
             raise HTTPException(
-                status_code=404, detail="User has no devices registered!"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User has no devices registered!",
             )
         return devices
 
@@ -50,20 +55,32 @@ class DevicesService:
         """
         Create a new device
         """
+        from api.utils.user_device_agent import generate_device_fingerprint
 
+        device_fingerprint = generate_device_fingerprint(device_info.get("user_agent"))
         device_exists = (
             db.query(Device)
             .filter(
-                Device.user_agent == device_info.get("user_agent"),
-                Device.device_name == device_info.get("device_name"),
                 Device.user_id == owner.id,
+                Device.device_fingerprint == device_fingerprint,
             )
             .first()
         )
         if device_exists:
             return
 
-        device_info.update({"user_id": owner.id})
+        device_info.update(
+            {"user_id": owner.id, "device_fingerprint": device_fingerprint}
+        )
+
+        # purify device info dict for Device object argument
+        device_info.pop("ip_address") if device_info["ip_address"] else None
+        (
+            device_info.pop("is_email_client")
+            if "is_email_client" in device_info.keys()
+            else None
+        )
+        device_info["user_agent_string"] = device_info.pop("user_agent")
 
         device = Device(**device_info)
         db.add(device)
