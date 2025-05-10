@@ -7,16 +7,22 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from api.v1.routes import api_version_one
 from api.v1.schemas.main import ProbeServerResponse, HomeResponse
-from api.core.logging.logging_config import setup_logging  # type: ignore
+from api.core.logging.logging_config import setup_logging
 from fastapi.templating import Jinja2Templates
 from api.utils.json_response import JsonResponseDict
+from api.utils.schedulers import scheduler  # type: ignore
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan function"""
 
+    # startup events
+    setup_logging()
+    scheduler.start()
     yield
+    # shutdown events
+    scheduler.shutdown()
 
 
 app = FastAPI(
@@ -24,13 +30,12 @@ app = FastAPI(
     title="FastAPI Authentication System",
     description="Welcome to FastAPI Authentication system by [Ajiboye Pius A.](https://ajiboye-pius.vercel.app)",
     version="1.0.0",
-    license_info={"name": "ISC", "url": "https://ajiboye-pius.vercel.app"},
+    license_info={"name": "MIT", "url": "https://ajiboye-pius.vercel.app"},
     contact={
         "name": "AuthSystem API Support",
         "url": "https://ajiboye-pius.vercel.app",
         "email": "ajiboyeadeleye080@gmail.com",
     },
-    terms_of_service="https://ajiboye-pius.vercel.app",
     # root_path="/api/auth",
     # root_path_in_servers=False,
 )
@@ -43,10 +48,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# LOGGING SETUP
-setup_logging()
 
 
 email_templates = Jinja2Templates(directory="smtp/templates/html_mail_templates")
