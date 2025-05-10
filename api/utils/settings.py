@@ -34,7 +34,9 @@ class Settings(BaseSettings):
     VERIFICATION_TOKEN_EXPIRATION_TIME: int = config(
         "VERIFICATION_TOKEN_EXPIRATION_TIME", cast=int, default=600
     )  # 10 minutes
-    JWT_REFRESH_EXPIRY: int = config("JWT_REFRESH_EXPIRY")
+    JWT_REFRESH_EXPIRY: int = config(
+        "JWT_REFRESH_EXPIRY_DAYS", cast=int, default=30
+    )  # 30 days
     ALLOW_AUTH_COOKIES: bool = config("ALLOW_AUTH_COOKIES", cast=bool, default=True)
     AUTH_SECURE_COOKIES: bool = config("SECURE_COOKIES", cast=bool, default=True)
     AUTH_SAME_SITE: str = config("SAME_SITE", cast=str, default="None")
