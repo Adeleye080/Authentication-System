@@ -3,12 +3,14 @@ Audit Logging Module
 """
 
 from sqlalchemy.orm import Session
-from api.v1.models.audit_logs import AuditLog
+from sqlalchemy import func
 from fastapi import HTTPException, status
-from api.v1.schemas.audit_logs import AuditLogSchema, AuditLogCreate
 from fastapi import BackgroundTasks
 from db.database import get_db
 import logging
+from typing import List, Tuple
+from api.v1.models.audit_logs import AuditLog
+from api.v1.schemas.audit_logs import AuditLogSchema, AuditLogCreate
 
 
 logger = logging.getLogger(__name__)
@@ -89,3 +91,30 @@ class AuditLogService:
             db_generator.close()
 
         return log
+
+    def retrieve_user_logs(
+        self, db: Session, user_id: str, page: int = 1, per_page: int = 50
+    ) -> Tuple[List[AuditLog], any]:
+        """Retrieves logs belonging to a user
+
+        Args:
+            - page: page number
+            - per_page: number of items per page
+
+        Returns:
+        """
+        # Calculate the offset for pagination
+        offset = (page - 1) * per_page
+
+        logs = (
+            db.query(AuditLog)
+            .filter(AuditLog.user_id == user_id)
+            .offset(offset)
+            .limit(per_page)
+            .all()
+        )
+
+        # Query to get the total number of logs
+        total_logs = db.query(func.count(AuditLog.id)).scalar()
+
+        return logs, total_logs
