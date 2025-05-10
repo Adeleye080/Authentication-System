@@ -174,7 +174,7 @@ class UserService(Service):
         schema: UserUpdateSchema,
         user_id: str = None,
         user_obj: User = None,
-    ):
+    ) -> User:
         """Update an Auth user data. must supply user_id or user_obj
 
         Args:
@@ -223,7 +223,7 @@ class UserService(Service):
 
         return user
 
-    def delete(self, db: Session, user_id: str):
+    def delete(self, db: Session, user_id: str) -> User:
         """
         deletes an auth user from the system
         """
@@ -248,7 +248,7 @@ class UserService(Service):
 
         return user
 
-    def hard_delete_user(self, db: Session, user_id: str):
+    def hard_delete_user(self, db: Session, user_id: str) -> User:
         """
         Remove user totally from the system.\n
         retains no user record
@@ -259,7 +259,9 @@ class UserService(Service):
         db.delete(user)
         db.commit()
 
-    def authenticate_user(self, db: Session, email: str, password: str):
+        return user
+
+    def authenticate_user(self, db: Session, email: str, password: str) -> User:
         """Function to authenticate a user with password"""
 
         user = db.query(User).filter(User.email == email).first()
