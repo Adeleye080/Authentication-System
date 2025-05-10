@@ -65,19 +65,24 @@ class AuditLogService:
 
     def log(
         self, db: Session, schema: AuditLogCreate, background_task: BackgroundTasks
-    ):
+    ) -> None:
         """Create new log entry in the background"""
 
         background_task.add_task(self.create, db=db, schema=schema)
-        return None
 
-    def log_without_bgt(self, schema: AuditLogCreate):
-        """Create new log entry without using background task"""
+    def log_without_bgt(self, schema: AuditLogCreate, db: Session = None):
+        """
+        Create new log entry without using background task\n
+        db is also optional
+        """
 
         log = AuditLog(**schema.model_dump(exclude_unset=True))
 
-        db_generator = get_db()
-        db = next(db_generator)
+        db_generator = None
+
+        if not db:
+            db_generator = get_db()
+            db = next(db_generator)
 
         try:
             db.add(log)
@@ -88,7 +93,8 @@ class AuditLogService:
                 f"Failed to audit log event ({schema.event}) with audit status '{schema.status}' for user with ID {schema.user_id}. error is {exc}"
             )
         finally:
-            db_generator.close()
+            if db_generator:
+                db_generator.close()
 
         return log
 
