@@ -326,8 +326,10 @@ def soft_delete_auth_user(
     summary="Removes a user entirely from the system",
     tags=["Superadmin"],
 )
-def hard_delete_auth_user(
+async def hard_delete_auth_user(
     user_id: UUID,
+    bgt: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(user_service.get_current_user),
 ):
@@ -359,4 +361,24 @@ def hard_delete_auth_user(
             status_code=exc.status_code,
         )
 
-    return deleted_user.to_dict()
+    superadmin_device_info = await get_device_info(request)
+
+    deleted_user_details = deleted_user.to_dict(hide_sensitive_data=False)
+
+    audit_log_service.log(
+        db=db,
+        background_task=bgt,
+        schema=AuditLogCreate(
+            user_id=user.id,
+            event=AuditLogEventEnum.HARD_DELETE,
+            description=f"superadmin ({user.id} - {user.email}) hard deleted a user. view deleted user info in details",
+            details=deleted_user_details,
+            status=AuditLogStatuses.SUCCESS,
+            ip_address=superadmin_device_info.get("ip_address", "Not Captured"),
+            user_agent=superadmin_device_info.get("user_agent", "Not Captured"),
+        ),
+    )
+
+    # send mail to deleted user if applicable
+
+    return deleted_user_details
