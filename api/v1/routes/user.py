@@ -50,8 +50,6 @@ async def create_new_auth_user(
     Registers new user in the auth system
     """
 
-    from api.utils.encrypters_and_decrypters import generate_user_verification_token
-
     try:
         new_user = user_service.create(db=db, schema=data)
     except HTTPException as exc:
@@ -68,15 +66,11 @@ async def create_new_auth_user(
             db=db, owner=new_user, device_info=device_info
         )
 
-    verification_link = f"{settings.FRONTEND_EMAIL_VERIFICATION_URL.strip('/')}?token={generate_user_verification_token(new_user.email)}"
-
     # send verification mail to user
-    notification_service.send_verify_email_mail(
-        user=new_user, verification_link=verification_link, bgt=background_tasks
-    )
+    notification_service.send_verify_email_mail(user=new_user, bgt=background_tasks)
 
     # log activities both for audit and normal logging
-    logger.info(f"Created new user: {new_user.username} <{new_user.email}>")
+    logger.info(f"Created new user: <{new_user.email}>")
 
     # Audit Log event
     try:
@@ -91,13 +85,11 @@ async def create_new_auth_user(
         audit_log_service.log(db=db, schema=schema, background_task=background_tasks)
 
         # log to logger
-        logger.info(
-            f"Audit Log {new_user.username} ({new_user.email}) account creation"
-        )
+        logger.info(f"Audit Log ({new_user.email}) account creation")
 
     except Exception as exc:
         logger.info(
-            f"Failed to Audit Log {new_user.username} ({new_user.email}) creation, but seems account creation was successful"
+            f"Failed to Audit Log ({new_user.email}) creation, but seems account creation was successful"
         )
 
     return JsonResponseDict(
@@ -110,7 +102,7 @@ async def create_new_auth_user(
     response_model=AllUsersResponse,
     status_code=status.HTTP_200_OK,
     summary="Fetch users regardless of their status",
-    tags=["Moderator", "Admin"],
+    tags=["Moderator", "Superadmin"],
 )
 async def get_all_auth_users(
     page: int = 1,
@@ -119,14 +111,14 @@ async def get_all_auth_users(
     user: User = Depends(user_service.get_current_user),
 ):
     """
-    Retrieves all Auth users, typically to admins or moderators.
+    Retrieves all Auth users, typically to Superadmins or moderators.
 
     - **Maximum** item per page is **50** and **Minimum** item per page is **1**
 
     - **Note:** Both **active**, **deleted** and **verified** users would be returned
     """
 
-    # perform operation to check is current user is admin
+    # perform operation to check is current user is Superadmin
 
     page = max(page, 1)
     per_page = max(per_page, 1)
@@ -167,7 +159,7 @@ async def get_all_auth_users(
     response_model=AllUsersResponse,
     status_code=status.HTTP_200_OK,
     summary="Fetches active and verified users",
-    tags=["Moderator", "Admin"],
+    tags=["Moderator", "Superadmin"],
 )
 async def get_active_and_verified_auth_users(
     page: int = 1,
@@ -213,7 +205,7 @@ async def get_active_and_verified_auth_users(
 
 
 @user_router.get(
-    "/me",
+    "/@me",
     response_model=UserResponseModel,
     status_code=status.HTTP_200_OK,
     tags=["User"],
@@ -222,7 +214,7 @@ async def get_an_auth_user(
     user: User = Depends(user_service.get_current_user),
 ):
     """
-    Retrieve an Auth user, typically to superadmin.
+    Retrieve an Auth user.
     """
 
     return JsonResponseDict(
@@ -233,7 +225,7 @@ async def get_an_auth_user(
 
 
 @user_router.patch(
-    "/me",
+    "/@me",
     response_model=UserUpdateResponseModel,
     status_code=status.HTTP_200_OK,
     tags=["User"],
@@ -246,7 +238,7 @@ async def patch_auth_user(
     """Update Auth user data"""
 
     try:
-        updated_user = user_service.update(db=db, user_id=user.id, schema=data)
+        updated_user = user_service.update(db=db, user_obj=user, schema=data)
     except HTTPException as exc:
         return JsonResponseDict(
             message="failed to update user",
@@ -262,7 +254,7 @@ async def patch_auth_user(
 
 
 @user_router.delete(
-    "/me",
+    "/@me",
     response_model=UserResponseModel,
     status_code=status.HTTP_200_OK,
     summary="Deletes a user",
@@ -295,7 +287,7 @@ async def soft_delete_auth_user(
     response_model=UserResponseModel,
     status_code=status.HTTP_200_OK,
     summary="Deletes a user in the system",
-    tags=["Admin", "Moderator"],
+    tags=["Superadmin", "Moderator"],
 )
 def soft_delete_auth_user(
     user_id: UUID,
@@ -309,7 +301,22 @@ def soft_delete_auth_user(
     Only accessible to superadmins
     """
 
-    pass
+    if not any([user.is_superadmin, user.is_moderator]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="You cannot perform this action",
+        )
+
+    try:
+        user = user_service.delete(db=db, user_id=user_id)
+    except HTTPException as exc:
+        return JsonResponseDict(
+            message=exc.detail,
+            status="failed",
+            status_code=exc.status_code,
+        )
+
+    return user.to_dict()
 
 
 @user_router.delete(
@@ -317,7 +324,7 @@ def soft_delete_auth_user(
     response_model=UserResponseModel,
     status_code=status.HTTP_200_OK,
     summary="Removes a user entirely from the system",
-    tags=["Admin"],
+    tags=["Superadmin"],
 )
 def hard_delete_auth_user(
     user_id: UUID,
@@ -331,4 +338,19 @@ def hard_delete_auth_user(
     Only accessible to superadmins
     """
 
-    pass
+    if not user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not enough permission",
+        )
+
+    try:
+        user = user_service.hard_delete_user(db=db, user_id=user_id)
+    except HTTPException as exc:
+        return JsonResponseDict(
+            message=exc.detail,
+            status="failed",
+            status_code=exc.status_code,
+        )
+
+    return user.to_dict()
