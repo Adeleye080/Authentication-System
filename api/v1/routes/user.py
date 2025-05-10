@@ -55,7 +55,7 @@ async def create_new_auth_user(
     except HTTPException as exc:
         return JsonResponseDict(
             status_code=exc.status_code,
-            error="Failed to create user",
+            status="failed",
             message=exc.detail,
         )
 
@@ -344,8 +344,14 @@ def hard_delete_auth_user(
             detail="Not enough permission",
         )
 
+    if user_id == user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot delete yourself",
+        )
+
     try:
-        user = user_service.hard_delete_user(db=db, user_id=user_id)
+        deleted_user = user_service.hard_delete_user(db=db, user_id=user_id)
     except HTTPException as exc:
         return JsonResponseDict(
             message=exc.detail,
@@ -353,4 +359,4 @@ def hard_delete_auth_user(
             status_code=exc.status_code,
         )
 
-    return user.to_dict()
+    return deleted_user.to_dict()
