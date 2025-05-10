@@ -52,7 +52,7 @@ def create_database():
 
 
 def get_db():
-    """Daatabase session generator"""
+    """Database session generator"""
     db = db_session()
     try:
         yield db
