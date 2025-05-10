@@ -105,6 +105,30 @@ test = ["anyio", "coverage[toml] (>=7)", "exceptiongroup (>=1.2.0)", "hypothesis
 doc = ["packaging", "Sphinx (>=7.4,<8.0)", "sphinx-rtd-theme", "sphinx-autodoc-typehints (>=1.2.0)"]
 
 [[package]]
+name = "apscheduler"
+version = "3.11.0"
+description = "In-process task scheduler with Cron-like capabilities"
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[package.dependencies]
+tzlocal = ">=3.0"
+
+[package.extras]
+etcd = ["etcd3", "protobuf (<=3.21.0)"]
+gevent = ["gevent"]
+mongodb = ["pymongo (>=3.0)"]
+redis = ["redis (>=3.0)"]
+rethinkdb = ["rethinkdb (>=2.4.0)"]
+sqlalchemy = ["sqlalchemy (>=1.4)"]
+tornado = ["tornado (>=4.3)"]
+twisted = ["twisted"]
+zookeeper = ["kazoo"]
+test = ["apscheduler", "pytest", "anyio (>=4.5.2)", "pyside6", "gevent", "pytz", "twisted"]
+doc = ["packaging", "sphinx", "sphinx-rtd-theme (>=1.3.0)"]
+
+[[package]]
 name = "async-timeout"
 version = "5.0.1"
 description = "Timeout context manager for asyncio programs"
@@ -968,6 +992,28 @@ optional = false
 python-versions = ">=3.8"
 
 [[package]]
+name = "tzdata"
+version = "2025.2"
+description = "Provider of IANA time zone data"
+category = "main"
+optional = false
+python-versions = ">=2"
+
+[[package]]
+name = "tzlocal"
+version = "5.3.1"
+description = "tzinfo object for the local timezone"
+category = "main"
+optional = false
+python-versions = ">=3.9"
+
+[package.dependencies]
+tzdata = {version = "*", markers = "platform_system == \"Windows\""}
+
+[package.extras]
+devenv = ["pytest (>=4.3)", "pytest-mock (>=3.3)", "pytest-cov", "check-manifest", "zest.releaser"]
+
+[[package]]
 name = "ua-parser"
 version = "1.0.1"
 description = "Python port of Browserscope's user agent parser"
@@ -1064,7 +1110,7 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "60c8c85a1bd6d59977e9b66eca35aa35b52e81effbbe7e47452e04d275c2da68"
+content-hash = "49477a8c622b3fee28d7d0b30d374cdd44bcf5a31fceef3279bc65b0f1f6bee4"
 
 [metadata.files]
 aiohappyeyeballs = []
@@ -1075,6 +1121,7 @@ aiosmtplib = []
 alembic = []
 annotated-types = []
 anyio = []
+apscheduler = []
 async-timeout = []
 attrs = []
 bcrypt = []
@@ -1142,6 +1189,8 @@ sqlalchemy = []
 starlette = []
 twilio = []
 typing-extensions = []
+tzdata = []
+tzlocal = []
 ua-parser = []
 ua-parser-builtins = []
 urllib3 = []
