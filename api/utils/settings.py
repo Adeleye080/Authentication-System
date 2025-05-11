@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     AUTH_SECURE_COOKIES: bool = config("SECURE_COOKIES", cast=bool, default=True)
     AUTH_SAME_SITE: str = config("SAME_SITE", cast=str, default="None")
 
-    # Database configurations
+    # DATABASE CONFIG
     DB_HOST: str = config("DB_HOST")
     DB_PORT: int = config("DB_PORT", cast=int)
     DB_USER: str = config("DB_USER")
@@ -95,6 +95,16 @@ class Settings(BaseSettings):
         # generated using Fernet.generate_key()
         default="Krq0Q8LWlYYv7famIjZ1k2gyzRZqEnKUqeEz2JX9CaQ=",
     )
+
+    # OAUTH CONFIG
+    GITHUB_CLIENT_ID: str = config("GITHUB_CLIENT_ID")
+    GITHUB_CLIENT_SECRET: str = config("GITHUB_CLIENT_SECRET", default="acde12")
+
+    GOOGLE_CLIENT_ID: str = config("GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_SECRET: str = config("GOOGLE_CLIENT_SECRET")
+
+    FACEBOOK_CLIENT_ID: str = config("FACEBOOK_CLIENT_ID", default="acde12")
+    FACEBOOK_CLIENT_SECRET: str = config("FACEBOOK_CLIENT_SECRET", default="acde12")
 
 
 settings = Settings()
