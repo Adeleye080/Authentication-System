@@ -69,4 +69,4 @@ async def delete_revoked_and_expired_refresh_token():
 
 
 # Schedule the job to run every hour
-scheduler.add_job(delete_revoked_and_expired_refresh_token, "interval", minutes=1)
+scheduler.add_job(delete_revoked_and_expired_refresh_token, "interval", hours=10)
