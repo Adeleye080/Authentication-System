@@ -11,6 +11,8 @@ from api.core.logging.logging_config import setup_logging
 from fastapi.templating import Jinja2Templates
 from api.utils.json_response import JsonResponseDict
 from api.utils.schedulers import scheduler  # type: ignore
+from api.utils.settings import settings
+from starlette.middleware.sessions import SessionMiddleware
 
 
 @asynccontextmanager
@@ -49,6 +51,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+#  SESSION MIDDLEWARE
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
 email_templates = Jinja2Templates(directory="smtp/templates/html_mail_templates")
 
