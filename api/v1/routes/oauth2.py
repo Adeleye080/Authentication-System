@@ -7,6 +7,8 @@ from api.utils.settings import settings
 import jwt
 import datetime
 import logging
+from api.utils.json_response import JsonResponseDict
+from api.v1.services import oauth2_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,6 +36,7 @@ oauth.register(
     client_secret=settings.GOOGLE_CLIENT_SECRET,
     access_token_url="https://oauth2.googleapis.com/token",
     authorize_url="https://accounts.google.com/o/oauth2/auth",
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
     api_base_url="https://www.googleapis.com/oauth2/v1/",
     client_kwargs={"scope": "openid email profile"},
 )
@@ -49,30 +52,32 @@ oauth.register(
 )
 
 
-def generate_jwt_token(user_info):
-    payload = {
-        "user": user_info,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1),
-    }
-    token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
-    return token
+@oauth2_router.get("/login/{provider}")
+async def login(request: Request, provider: str):
+    """Login route for OAuth2 providers"""
 
-
-@oauth2_router.get("/login/google")
-async def login(request: Request):
-    redirect_uri = request.url_for("authorize", provider="google")
-    print(dir(oauth))
-    print(oauth._clients)
-    print(type(oauth._clients))
-    return await oauth.google.authorize_redirect(request, redirect_uri)
-
-
-@oauth2_router.get("/authorize/{provider}")
-async def authorize(provider: str, request: Request):
     if provider not in oauth._registry:
         raise HTTPException(status_code=400, detail="Unsupported provider")
 
-    # token = await oauth._clients.get(provider).authorize_access_token(request)
+    # Redirect to the provider's authorization URL
+    if provider == "github":
+        redirect_uri = request.url_for("authorize", provider="github")
+        return await oauth.github.authorize_redirect(request, redirect_uri)
+    elif provider == "facebook":
+        redirect_uri = request.url_for("authorize", provider="facebook")
+        return await oauth.facebook.authorize_redirect(request, redirect_uri)
+    elif provider == "google":
+        redirect_uri = request.url_for("authorize", provider="google")
+        return await oauth.google.authorize_redirect(request, redirect_uri)
+
+
+@oauth2_router.get("/authorize/{provider}", include_in_schema=False)
+async def authorize(provider: str, request: Request):
+    """Authorization callback route for OAuth2 providers"""
+
+    if provider not in oauth._registry:
+        raise HTTPException(status_code=400, detail="Unsupported provider")
+
     token = await oauth.google.authorize_access_token(request)
     if provider == "github":
         user_info = await oauth.github.get("user", token=token)
@@ -84,18 +89,6 @@ async def authorize(provider: str, request: Request):
         raise HTTPException(status_code=400, detail="Unsupported provider")
 
     user_info = user_info.json()
-    jwt_token = generate_jwt_token(user_info)
+    print("\n\n", user_info, "\n\n")
+    jwt_token = {"token": "some-secure-token"}
     return JSONResponse(content={"token": jwt_token, "user_info": user_info})
-
-
-# @oauth2_router.get("/login")
-# async def login(request: Request):
-#     redirect_uri = request.url_for("auth", _external=True)
-#     return await oauth.google.authorize_redirect(request, redirect_uri)
-
-
-# @oauth2_router.get("/auth")
-# async def auth(request: Request):
-#     token = await oauth.google.authorize_access_token(request)
-#     user = await oauth.google.parse_id_token(request, token)
-#     return {"user_info": user}
