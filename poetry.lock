@@ -153,6 +153,17 @@ tests = ["cloudpickle", "hypothesis", "mypy (>=1.11.1)", "pympler", "pytest-mypy
 tests-mypy = ["mypy (>=1.11.1)", "pytest-mypy-plugins"]
 
 [[package]]
+name = "authlib"
+version = "1.5.2"
+description = "The ultimate Python library in building OAuth and OpenID Connect servers and clients."
+category = "main"
+optional = false
+python-versions = ">=3.9"
+
+[package.dependencies]
+cryptography = "*"
+
+[[package]]
 name = "bcrypt"
 version = "4.3.0"
 description = "Modern password hashing for your software and your servers"
@@ -478,6 +489,45 @@ optional = false
 python-versions = ">=3.7"
 
 [[package]]
+name = "httpcore"
+version = "1.0.8"
+description = "A minimal low-level HTTP client."
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[package.dependencies]
+certifi = "*"
+h11 = ">=0.13,<0.15"
+
+[package.extras]
+asyncio = ["anyio (>=4.0,<5.0)"]
+http2 = ["h2 (>=3,<5)"]
+socks = ["socksio (>=1.0.0,<2.0.0)"]
+trio = ["trio (>=0.22.0,<1.0)"]
+
+[[package]]
+name = "httpx"
+version = "0.28.1"
+description = "The next generation HTTP client."
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[package.dependencies]
+anyio = "*"
+certifi = "*"
+httpcore = ">=1.0.0,<2.0.0"
+idna = "*"
+
+[package.extras]
+brotli = ["brotli", "brotlicffi"]
+cli = ["click (>=8.0.0,<9.0.0)", "pygments (>=2.0.0,<3.0.0)", "rich (>=10,<14)"]
+http2 = ["h2 (>=3,<5)"]
+socks = ["socksio (>=1.0.0,<2.0.0)"]
+zstd = ["zstandard (>=0.18.0)"]
+
+[[package]]
 name = "idna"
 version = "3.10"
 description = "Internationalized Domain Names in Applications (IDNA)"
@@ -487,6 +537,14 @@ python-versions = ">=3.6"
 
 [package.extras]
 all = ["ruff (>=0.6.2)", "mypy (>=1.11.2)", "pytest (>=8.3.2)", "flake8 (>=7.1.1)"]
+
+[[package]]
+name = "itsdangerous"
+version = "2.2.0"
+description = "Safely pass data to untrusted environments and back."
+category = "main"
+optional = false
+python-versions = ">=3.8"
 
 [[package]]
 name = "jinja2"
@@ -1110,7 +1168,7 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "49477a8c622b3fee28d7d0b30d374cdd44bcf5a31fceef3279bc65b0f1f6bee4"
+content-hash = "4c05eb17aa3a3f835e68d20fa25bd2113bced68004c412e5a80b65d2c2b36c88"
 
 [metadata.files]
 aiohappyeyeballs = []
@@ -1124,6 +1182,7 @@ anyio = []
 apscheduler = []
 async-timeout = []
 attrs = []
+authlib = []
 bcrypt = []
 beautifulsoup4 = []
 blinker = []
@@ -1150,7 +1209,10 @@ frozenlist = []
 geoip2 = []
 greenlet = []
 h11 = []
+httpcore = []
+httpx = []
 idna = []
+itsdangerous = []
 jinja2 = []
 jwt = []
 limits = []

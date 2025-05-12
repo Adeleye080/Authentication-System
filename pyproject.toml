@@ -36,6 +36,9 @@ twilio = "^9.5.2"
 pillow = "^11.2.1"
 geoip2 = "^5.0.1"
 APScheduler = "^3.11.0"
+Authlib = "^1.5.2"
+httpx = "^0.28.1"
+itsdangerous = "^2.2.0"
 
 [tool.poetry.dev-dependencies]
 
