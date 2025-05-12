@@ -11,7 +11,6 @@ from api.v1.routes.device import user_device_router
 api_version_one = APIRouter(prefix="/api/v1/auth")
 
 api_version_one.include_router(auth_router)
-api_version_one.include_router(oauth_router)
 api_version_one.include_router(oauth2_router)
 api_version_one.include_router(two_factor_auth_router)
 api_version_one.include_router(user_router)
