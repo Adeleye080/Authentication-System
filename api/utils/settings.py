@@ -103,8 +103,8 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = config("GOOGLE_CLIENT_ID")
     GOOGLE_CLIENT_SECRET: str = config("GOOGLE_CLIENT_SECRET")
 
-    FACEBOOK_CLIENT_ID: str = config("FACEBOOK_CLIENT_ID", default="acde12")
-    FACEBOOK_CLIENT_SECRET: str = config("FACEBOOK_CLIENT_SECRET", default="acde12")
+    FACEBOOK_APP_ID: str = config("FACEBOOK_APP_ID", default="acde12")
+    FACEBOOK_APP_SECRET: str = config("FACEBOOK_APP_SECRET", default="acde12")
 
 
 settings = Settings()
