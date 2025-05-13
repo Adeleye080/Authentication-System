@@ -127,3 +127,20 @@ async def validation_exception(request: Request, exc: RequestValidationError):
             "message": f"Invalid input: {errors}",
         },
     )
+
+
+# webhooks
+@app.webhooks.post("oauth2-signup")
+async def new_oauth2_signup():
+    """
+    When a new user signs up with the oauth2 flow, we will send you an `oauth2-signup` event POST request with this data
+    to the webhook URL that you register with our system.
+    """
+
+
+@app.webhooks.post("user-hard-delete")
+async def user_hard_delete():
+    """
+    When a user is deleted, we will send you a `user-hard-delete` event POST request with this data
+    to the webhook URL that you register with our system.
+    """
