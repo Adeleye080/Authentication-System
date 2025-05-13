@@ -99,7 +99,7 @@ class User(BaseModel):
         :param email: User email
         :param id: User ID
 
-        :return: True if user exists, False otherwise
+        :return: (True, user_obj) if user exists, (False, {}) otherwise
         """
 
         if not any([email, id]):
