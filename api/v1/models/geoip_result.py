@@ -7,18 +7,20 @@ class GeoIPResult:
     """Data class to store geolocation information."""
 
     ip_address: str
-    country: str = ""
+    country_name: str = ""
+    country_code: str = ""
     region: str = ""
     city: str = ""
     timezone: str = ""
-    continent: str = ""
+    continent_code: str = ""
+    continent_name: str = ""
     success: bool = False
     source: str = ""
 
     def __str__(self) -> str:
         return (
-            f"IP: {self.ip_address} | Country: {self.country} | Region: {self.region} | "
-            f"City: {self.city} | Timezone: {self.timezone} | Continent: {self.continent} | "
+            f"IP: {self.ip_address} | Country: {self.country_name} | Region: {self.region} | "
+            f"City: {self.city} | Timezone: {self.timezone} | Continent: {self.continent_name} | "
             f"Source: {self.source}"
         )
 
