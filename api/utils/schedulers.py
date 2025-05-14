@@ -3,10 +3,15 @@ from sqlalchemy.exc import SQLAlchemyError
 import logging
 from datetime import datetime, timezone
 from db.database import get_db
+import os
+import requests
+import gzip
+import shutil
+from api.utils.settings import settings
 
 
 scheduler = AsyncIOScheduler()
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 
 async def delete_revoked_and_expired_refresh_token():
@@ -68,5 +73,48 @@ async def delete_revoked_and_expired_refresh_token():
         db.close()
 
 
+def download_and_update_geolite_db():
+    """
+    Download and extract the latest MaxMind GeoLite2 City database.
+    """
+    # You must have a MaxMind license key (get it from your MaxMind account)
+    license_key = settings.MAXMIND_LICENSE_KEY
+    # do wget request to get the download URL, pass 'user' and 'password' (i.e --user='maxmind account id', --password='maxmind license key')
+    download_url = f"https://download.maxmind.com/geoip/databases/GeoLite2-City/download?suffix=tar.gz"
+    target_dir = os.path.dirname(settings.MAXMIND_MMDB_DATABASE_PATH)
+    os.makedirs(target_dir, exist_ok=True)
+
+    archive_path = os.path.join(target_dir, "GeoLite2-City.tar.gz")
+
+    # Download the archive
+    response = requests.get(download_url, stream=True)
+    if response.status_code != 200:
+        raise Exception(f"Failed to download GeoLite2 database: {response.text}")
+
+    with open(archive_path, "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+
+    # Extract the .mmdb file from the tar.gz archive
+    import tarfile
+
+    with tarfile.open(archive_path, "r:gz") as tar:
+        for member in tar.getmembers():
+            if member.name.endswith(".mmdb"):
+                member.name = os.path.basename(member.name)  # Remove path
+                tar.extract(member, target_dir)
+                mmdb_path = os.path.join(target_dir, member.name)
+                # Move/rename to the path expected by your app
+                shutil.move(mmdb_path, settings.MAXMIND_MMDB_DATABASE_PATH)
+                break
+
+    # Clean up
+    os.remove(archive_path)
+
+
+# Schedule the job to run once a week (or as needed)
+scheduler.add_job(download_and_update_geolite_db, "interval", weeks=1)
+
+
 # Schedule the job to run every hour
-scheduler.add_job(delete_revoked_and_expired_refresh_token, "interval", hours=10)
+scheduler.add_job(delete_revoked_and_expired_refresh_token, "interval", hours=1)
