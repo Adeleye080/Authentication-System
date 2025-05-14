@@ -257,6 +257,20 @@ optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7"
 
 [[package]]
+name = "coverage"
+version = "7.8.0"
+description = "Code coverage measurement for Python"
+category = "main"
+optional = false
+python-versions = ">=3.9"
+
+[package.dependencies]
+tomli = {version = "*", optional = true, markers = "python_full_version <= \"3.11.0a6\" and extra == \"toml\""}
+
+[package.extras]
+toml = ["tomli"]
+
+[[package]]
 name = "cryptography"
 version = "44.0.2"
 description = "cryptography is a package which provides cryptographic recipes and primitives to Python developers."
@@ -539,6 +553,14 @@ python-versions = ">=3.6"
 all = ["ruff (>=0.6.2)", "mypy (>=1.11.2)", "pytest (>=8.3.2)", "flake8 (>=7.1.1)"]
 
 [[package]]
+name = "iniconfig"
+version = "2.1.0"
+description = "brain-dead simple config-ini parsing"
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[[package]]
 name = "itsdangerous"
 version = "2.2.0"
 description = "Safely pass data to untrusted environments and back."
@@ -722,6 +744,26 @@ typing = ["typing-extensions"]
 xmp = ["defusedxml"]
 
 [[package]]
+name = "pluggy"
+version = "1.5.0"
+description = "plugin and hook calling mechanisms for python"
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[package.extras]
+dev = ["pre-commit", "tox"]
+testing = ["pytest", "pytest-benchmark"]
+
+[[package]]
+name = "pprintpp"
+version = "0.4.0"
+description = "A drop-in replacement for pprint that's actually pretty"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "premailer"
 version = "3.10.0"
 description = "Turns CSS blocks into style attributes"
@@ -755,6 +797,30 @@ description = "ASN.1 types and codecs"
 category = "main"
 optional = false
 python-versions = "*"
+
+[[package]]
+name = "pycountry"
+version = "24.6.1"
+description = "ISO country, subdivision, language, currency and script definitions and their translations"
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[[package]]
+name = "pycountry-convert"
+version = "0.7.2"
+description = "Extension of Python package pycountry providing conversion functions."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+pprintpp = ">=0.3.0"
+pycountry = ">=16.11.27.1"
+pytest = ">=3.4.0"
+pytest-cov = ">=2.5.1"
+pytest-mock = ">=1.6.3"
+"repoze.lru" = ">=0.7"
 
 [[package]]
 name = "pycparser"
@@ -847,6 +913,54 @@ python-versions = ">=3.7"
 test = ["coverage", "wheel", "ruff", "mypy"]
 
 [[package]]
+name = "pytest"
+version = "8.3.5"
+description = "pytest: simple powerful testing with Python"
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[package.dependencies]
+colorama = {version = "*", markers = "sys_platform == \"win32\""}
+exceptiongroup = {version = ">=1.0.0rc8", markers = "python_version < \"3.11\""}
+iniconfig = "*"
+packaging = "*"
+pluggy = ">=1.5,<2"
+tomli = {version = ">=1", markers = "python_version < \"3.11\""}
+
+[package.extras]
+dev = ["argcomplete", "attrs (>=19.2)", "hypothesis (>=3.56)", "mock", "pygments (>=2.7.2)", "requests", "setuptools", "xmlschema"]
+
+[[package]]
+name = "pytest-cov"
+version = "6.1.1"
+description = "Pytest plugin for measuring coverage."
+category = "main"
+optional = false
+python-versions = ">=3.9"
+
+[package.dependencies]
+coverage = {version = ">=7.5", extras = ["toml"]}
+pytest = ">=4.6"
+
+[package.extras]
+testing = ["fields", "hunter", "process-tests", "pytest-xdist", "virtualenv"]
+
+[[package]]
+name = "pytest-mock"
+version = "3.14.0"
+description = "Thin-wrapper around the mock package for easier use with pytest"
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[package.dependencies]
+pytest = ">=6.2.5"
+
+[package.extras]
+dev = ["pre-commit", "pytest-asyncio", "tox"]
+
+[[package]]
 name = "python-decouple"
 version = "3.8"
 description = "Strict separation of settings from code."
@@ -908,6 +1022,18 @@ colorama = {version = "*", markers = "sys_platform == \"win32\""}
 pil = ["pillow (>=9.1.0)"]
 all = ["pillow (>=9.1.0)", "pypng"]
 png = ["pypng"]
+
+[[package]]
+name = "repoze.lru"
+version = "0.7"
+description = "A tiny LRU cache implementation and decorator"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.extras]
+docs = ["sphinx"]
+testing = ["coverage", "nose"]
 
 [[package]]
 name = "requests"
@@ -1026,6 +1152,14 @@ anyio = ">=3.6.2,<5"
 
 [package.extras]
 full = ["httpx (>=0.27.0,<0.29.0)", "itsdangerous", "jinja2", "python-multipart (>=0.0.18)", "pyyaml"]
+
+[[package]]
+name = "tomli"
+version = "2.2.1"
+description = "A lil' TOML parser"
+category = "main"
+optional = false
+python-versions = ">=3.8"
 
 [[package]]
 name = "twilio"
@@ -1168,7 +1302,7 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "4c05eb17aa3a3f835e68d20fa25bd2113bced68004c412e5a80b65d2c2b36c88"
+content-hash = "3e8e735eb426646e9c83edeb21b13bd80ed88537dc60f2da0da2d0bceba23edd"
 
 [metadata.files]
 aiohappyeyeballs = []
@@ -1192,6 +1326,7 @@ cffi = []
 charset-normalizer = []
 click = []
 colorama = []
+coverage = []
 cryptography = []
 cssselect = []
 cssutils = []
@@ -1212,6 +1347,7 @@ h11 = []
 httpcore = []
 httpx = []
 idna = []
+iniconfig = []
 itsdangerous = []
 jinja2 = []
 jwt = []
@@ -1226,9 +1362,13 @@ multidict = []
 packaging = []
 passlib = []
 pillow = []
+pluggy = []
+pprintpp = []
 premailer = []
 propcache = []
 pyasn1 = []
+pycountry = []
+pycountry-convert = []
 pycparser = []
 pydantic = []
 pydantic-core = []
@@ -1236,11 +1376,15 @@ pydantic-settings = []
 pyjwt = []
 pymysql = []
 pyotp = []
+pytest = []
+pytest-cov = []
+pytest-mock = []
 python-decouple = []
 python-dotenv = []
 python-jose = []
 python-multipart = []
 qrcode = []
+"repoze.lru" = []
 requests = []
 rsa = []
 six = []
@@ -1249,6 +1393,7 @@ sniffio = []
 soupsieve = []
 sqlalchemy = []
 starlette = []
+tomli = []
 twilio = []
 typing-extensions = []
 tzdata = []
