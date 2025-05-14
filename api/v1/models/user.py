@@ -87,6 +87,7 @@ class User(BaseModel):
 
         db.add(self)
         db.commit()
+        db.refresh(self)
 
     def user_exists(
         self, db: Session, id: str = None, email: EmailStr = None
