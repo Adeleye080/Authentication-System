@@ -22,7 +22,9 @@ async def lifespan(app: FastAPI):
     # startup events
     setup_logging()
     scheduler.start()
+
     yield
+
     # shutdown events
     scheduler.shutdown()
 
@@ -53,6 +55,7 @@ app.add_middleware(
 
 #  SESSION MIDDLEWARE
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+
 
 email_templates = Jinja2Templates(directory="smtp/templates/html_mail_templates")
 
@@ -135,6 +138,11 @@ async def new_oauth2_signup():
     """
     When a new user signs up with the oauth2 flow, we will send you an `oauth2-signup` event POST request with this data
     to the webhook URL that you register with our system.
+
+    **Security Requirements:**
+    - Your server must allow incoming POST requests from this server's IP.
+    - If you use a firewall or IP allowlist, add this server's IP to the allowed list.
+    - If your webhook endpoint is browser-based, ensure your CORS policy allows requests from this domain.
     """
 
 
