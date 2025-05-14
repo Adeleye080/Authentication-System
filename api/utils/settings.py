@@ -4,8 +4,7 @@ from decouple import config
 from pathlib import Path
 
 
-# Use this to build paths inside the project
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -25,6 +24,12 @@ class Settings(BaseSettings):
     )
     COMPANY_PRIVACY_POLICY_URL: str = config(
         "COMPANY_PRIVACY_POLICY_URL", default="http://#"
+    )
+
+    WEBHOOK_URL: Optional[str] = config(
+        "WEBHOOK_URL",
+        default=None,
+        cast=str,
     )
 
     # APPLICATION SECRETS
@@ -63,13 +68,13 @@ class Settings(BaseSettings):
     )
 
     # MAIL GUN CONFIG
-    MAILGUN_API_KEY: str = config("MAILGUN_API_KEY")
-    MAILGUN_DOMAIN: str = config("MAILGUN_DOMAIN")
+    MAILGUN_API_KEY: str = config("MAILGUN_API_KEY", default=None)
+    MAILGUN_DOMAIN: str = config("MAILGUN_DOMAIN", default=None)
 
     # TWILIO SMS CONFIG
-    TWILIO_ACCOUNT_SID: str = config("TWILIO_ACCOUNT_SID")
-    TWILIO_AUTH_TOKEN: str = config("TWILIO_AUTH_TOKEN")
-    TWILIO_PHONE_NUMBER: str = config("TWILIO_PHONE_NUMBER")
+    TWILIO_ACCOUNT_SID: str = config("TWILIO_ACCOUNT_SID", default=None)
+    TWILIO_AUTH_TOKEN: str = config("TWILIO_AUTH_TOKEN", default=None)
+    TWILIO_PHONE_NUMBER: str = config("TWILIO_PHONE_NUMBER", default=None)
 
     # APP INFO
     APP_NAME: str = config("APP_NAME", default="FASTAPI AUTH SYSTEM")
@@ -105,6 +110,16 @@ class Settings(BaseSettings):
 
     FACEBOOK_APP_ID: str = config("FACEBOOK_APP_ID", default="acde12")
     FACEBOOK_APP_SECRET: str = config("FACEBOOK_APP_SECRET", default="acde12")
+
+    # MAXMIND CREDENTIALS (FOR GEOLOCATION)
+    MAXMIND_ACCOUNT_ID: str = config("MAXMIND_ACCOUNT_ID")
+    MAXMIND_LICENSE_KEY: str = config("MAXMIND_LICENSE_KEY")
+
+    MAXMIND_MMDB_DATABASE_PATH: str = config(
+        "MAXMIND_MMDB_DATABASE_PATH",
+        cast=str,
+        default=f"{BASE_DIR}/geoip/GeoLite2-City.mmdb",
+    )
 
 
 settings = Settings()
