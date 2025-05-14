@@ -49,11 +49,17 @@ class BaseModel(Base):
         return db.query(cls).all()
 
     @classmethod
-    def get_by_id(cls, id):
+    def get_by_id(cls, id: str):
         from db.database import get_db
 
-        db = Depends(get_db)
         """ returns a single object from the db
         """
-        obj = db.query(cls).filter_by(id=id).first()
+
+        try:
+            db_generator = get_db()
+            db = next(db_generator)
+            obj = db.query(cls).filter_by(id=id).first()
+        finally:
+            db.close()
+
         return obj
