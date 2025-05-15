@@ -4,7 +4,12 @@ from authlib.integrations.starlette_client import OAuth  # type: ignore
 from starlette.requests import Request
 import logging
 from api.utils.settings import settings
-from api.v1.services import oauth2_service, user_service, audit_log_service
+from api.v1.services import (
+    oauth2_service,
+    user_service,
+    audit_log_service,
+    notification_service,
+)
 from api.v1.models.user import User
 from api.v1.schemas.audit_logs import (
     AuditLogCreate,
@@ -94,7 +99,11 @@ async def authorize(
 
     if not user_exist:
         user = User(email=user_email, password=str(random.randint(5, 15)))
+        user.is_active = True
+        user.is_verified = True
         user.save(db=db)
+        # send welcome email to user
+        notification_service.send_welcome_mail(user=user, bgt=bgt)
 
         # send new user info to webhook url in the background
         oauth2_service.post_oauth_signup_webhook(bgt, user_info)
