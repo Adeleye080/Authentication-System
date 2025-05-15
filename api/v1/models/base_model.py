@@ -13,7 +13,7 @@ class BaseModel(Base):
 
     __abstract__ = True
 
-    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid7()))
+    id = Column(String(36), primary_key=True, index=True, default=lambda: str(uuid7()))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -29,10 +29,10 @@ class BaseModel(Base):
 
     def to_dict(self):
         """returns a dictionary representation of the instance"""
+
         obj_dict = self.__dict__.copy()
         if obj_dict["_sa_instance_state"]:
             del obj_dict["_sa_instance_state"]
-        obj_dict["id"] = self.id
         if self.created_at:
             obj_dict["created_at"] = self.created_at.isoformat()
         if self.updated_at:
@@ -49,11 +49,17 @@ class BaseModel(Base):
         return db.query(cls).all()
 
     @classmethod
-    def get_by_id(cls, id):
+    def get_by_id(cls, id: str):
         from db.database import get_db
 
-        db = Depends(get_db)
         """ returns a single object from the db
         """
-        obj = db.query(cls).filter_by(id=id).first()
+
+        try:
+            db_generator = get_db()
+            db = next(db_generator)
+            obj = db.query(cls).filter_by(id=id).first()
+        finally:
+            db.close()
+
         return obj

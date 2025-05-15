@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Dict
+from typing import Dict, Union
 
 
 class ProbeServerResponse(BaseModel):
@@ -12,11 +12,24 @@ class ProbeServerResponse(BaseModel):
         from_attributes = True
 
 
+class Author(BaseModel):
+    """Site Author"""
+
+    author: Dict[str, str]
+
+
+class HomeRespData(BaseModel):
+    """Data for the Home Response Model"""
+
+    author: dict = {}
+    URL: str = "Home URL"
+
+
 class HomeResponse(BaseModel):
     """
     Homepage Response Model
     """
 
     message: str
-    data: Dict
+    data: HomeRespData
     status_code: int = 200

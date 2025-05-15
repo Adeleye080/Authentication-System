@@ -1,13 +1,14 @@
 from sqlalchemy import Column, Boolean, DateTime, ForeignKey, String, Index
 from sqlalchemy.orm import relationship
-from db.database import Base
 from api.v1.models.base_model import BaseModel
 
 
 class RefreshToken(BaseModel):
-    __tablename__ = "refresh_tokens"
+    __tablename__ = "auth_refresh_tokens"
 
-    user_id = Column(String(128), ForeignKey("users.id"), nullable=False)
+    user_id = Column(
+        String(36), ForeignKey("auth_users.id", ondelete="CASCADE"), nullable=False
+    )
     token = Column(String(400), unique=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     revoked = Column(Boolean, default=False, nullable=False)

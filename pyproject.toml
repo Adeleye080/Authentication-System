@@ -3,7 +3,7 @@ name = "FastAPI-Auth"
 version = "0.1.0"
 description = "full authentication system with JWT, OAuth2, 2FA, role-based access control (RBAC), and audit logging for FastAPI applications"
 authors = ["Ajiboye Adeleye Pius"]
-license = "MIT"
+license = "ISC"
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -24,6 +24,23 @@ alembic = "^1.14.1"
 PyMySQL = "^1.1.1"
 jwt = "^1.3.1"
 PyJWT = "^2.10.1"
+cryptography = "^44.0.2"
+user-agents = "2.2.0"
+Jinja2 = "^3.1.6"
+mjml = "^0.11.0"
+fastapi-mail = "^1.4.2"
+slowapi = "^0.1.9"
+premailer = "^3.10.0"
+qrcode = "^8.1"
+twilio = "^9.5.2"
+pillow = "^11.2.1"
+geoip2 = "^5.0.1"
+APScheduler = "^3.11.0"
+Authlib = "^1.5.2"
+httpx = "^0.28.1"
+itsdangerous = "^2.2.0"
+pycountry-convert = "^0.7.2"
+pytz = "^2025.2"
 
 [tool.poetry.dev-dependencies]
 

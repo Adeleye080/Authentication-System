@@ -1,0 +1,70 @@
+<mjml>
+  <mj-head>
+    <mj-title>Welcome to Our Service</mj-title>
+    <mj-font name="Roboto" href="https://fonts.googleapis.com/css?family=Roboto:400,500,700" />
+    <mj-attributes>
+      <mj-all font-family="Roboto, Arial, sans-serif" />
+      <mj-text font-size="16px" color="#000000" line-height="24px" />
+      <mj-section background-color="#ffffff" padding="20px 0" />
+    </mj-attributes>
+    <mj-style>
+      .link-nostyle {
+        color: inherit;
+        text-decoration: none
+      }
+
+      .footer-link {
+        color: #888888;
+        text-decoration: underline
+      }
+    </mj-style>
+  </mj-head>
+  <mj-body background-color="#f0f0f0">
+    <!-- Header -->
+    <mj-section padding="20px 0">
+      <mj-column>
+        <mj-image src={{companyLogoUrl}} alt="Logo" />
+      </mj-column>
+    </mj-section>
+
+    <!-- Content -->
+    <mj-section>
+      <mj-column>
+        <mj-text font-size="24px" font-weight="500" padding-bottom="20px">
+          Welcome to {{companyName}}!
+        </mj-text>
+        <mj-text>
+          Hello {{username}},
+        </mj-text>
+        <mj-text padding-bottom="10px">
+          Thank you for creating an account with us. We're excited to have you on board!
+        </mj-text>
+        <mj-text padding-bottom="20px">
+          Your account has been successfully created and you can now access all our features.
+        </mj-text>
+        <mj-button background-color="#4A90E2" color="white" font-weight="500" border-radius="4px" href={{dashboardLink}}>
+          Go to Dashboard
+        </mj-button>
+        <mj-text font-size="14px" color="#666666" padding-top="20px">
+          If you have any questions or need assistance, please don't hesitate to reach out to our support team.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer -->
+    <mj-section padding-top="20px" border-top="1px solid #eeeeee">
+      <mj-column>
+        <mj-text font-size="12px" color="#888888" align="center">
+          &copy; {{currentYear}} {{companyName}}. All rights reserved.
+        </mj-text>
+        <mj-text font-size="12px" color="#888888" align="center" padding-top="10px">
+          <a href={{termsUrl}} class="footer-link">Terms of Service</a> |
+          <a href={{privacyUrl}} class="footer-link">Privacy Policy</a>
+        </mj-text>
+        <mj-text font-size="12px" color="#888888" align="center" padding-top="10px">
+          {{companyAddress}}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Annotated, List, Union, Optional
 import re
 import dns.resolver
-from email_validator import validate_email, EmailNotValidError
+from email_validator import validate_email, EmailNotValidError  # type: ignore
 from enum import Enum as PyEnum
 
 
@@ -22,17 +22,105 @@ def validate_mx_record(domain: str):
     """
     Validate mx records for email
     """
-    # try:
-    #     # Try to resolve the MX record for the domain
-    #     mx_records = dns.resolver.resolve(domain, "MX")
-    #     return True if mx_records else False
-    # except dns.resolver.NoAnswer:
-    #     return False
-    # except dns.resolver.NXDOMAIN:
-    #     return False
-    # except Exception:
-    #     return False
+    try:
+        # Try to resolve the MX record for the domain
+        mx_records = dns.resolver.resolve(domain, "MX")
+        return True if mx_records else False
+    except dns.resolver.NoAnswer:
+        return False
+    except dns.resolver.NXDOMAIN:
+        return False
+    except Exception:
+        return False
     return True
+
+
+class PasswordChangeRequest(BaseModel):
+    """Validate input password strings"""
+
+    old_password: Annotated[
+        str, StringConstraints(min_length=8, max_length=64, strip_whitespace=True)
+    ]
+    new_password: Annotated[
+        str, StringConstraints(min_length=8, max_length=64, strip_whitespace=True)
+    ]
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_password_regex(cls, values: dict):
+        old_password_str = values.get("old_password")
+        new_password_str = values.get("new_password")
+
+        if not old_password_str:
+            raise ValueError("Old password is required")
+        if not new_password_str:
+            raise ValueError("New password is required")
+
+        # Validate password using regex
+        if not PASSWORD_REGEX.match(old_password_str) or not PASSWORD_REGEX.match(
+            new_password_str
+        ):
+            raise ValueError(
+                "Passwords must be at least 8 characters long and include "
+                "one lowercase letter, one uppercase letter, one digit, "
+                "and one special character (!@#$%&*?_~-)."
+            )
+        return values
+
+
+class PasswordResetRequest(BaseModel):
+    """Validate input password strings"""
+
+    new_password: Annotated[
+        str, StringConstraints(min_length=8, max_length=64, strip_whitespace=True)
+    ] = "AuthUser12@"
+    confirm_new_password: Annotated[
+        str,
+        StringConstraints(min_length=8, max_length=64, strip_whitespace=True),
+        Field(exclude=True),  # exclude confirm_password field
+    ] = "AuthUser12@"
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_password_regex(cls, values: dict):
+        password_str = values.get("new_password")
+        confirm_password_str = values.get("confirm_new_password")
+
+        if not password_str:
+            raise ValueError("Password is required")
+        if not confirm_password_str:
+            raise ValueError("Confirm password is required")
+
+        # Validate password using regex
+        if not PASSWORD_REGEX.match(password_str):
+            raise ValueError(
+                "Passwords must be at least 8 characters long and include "
+                "one lowercase letter, one uppercase letter, one digit, "
+                "and one special character (!@#$%&*?_~-)."
+            )
+
+        if password_str != confirm_password_str:
+            raise ValueError("Passwords do not match")
+
+        return values
+
+
+class LoginSource(str, PyEnum):
+    """Login sources"""
+
+    PASSWORD = "password"
+    GOOGLE = "google"
+    MAGICLINK = "magiclink"
+    FACEBOOK = "facebook"
+    GITHUB = "github"
+
+
+class OAuthProviders(BaseModel):
+    """OAuth providera"""
+
+    GOOGLE: str = "google"
+    FACEBOOK: str = "facebook"
+    GITHUB: str = "github"
 
 
 class UserResponseModel(BaseModel):
@@ -40,12 +128,14 @@ class UserResponseModel(BaseModel):
 
     id: str
     email: EmailStr
-    recovery_email: EmailStr
+    recovery_email: Optional[EmailStr]
     is_active: bool = False
     is_verified: bool = False
     is_deleted: bool = False
     created_at: datetime
     updated_at: datetime
+    last_login: Optional[datetime] = None
+    login_source: Optional[LoginSource] = None
 
     class Config:
         from_attributes = True
@@ -55,6 +145,32 @@ class UserUpdateSchema(BaseModel):
     """user update schema for user"""
 
     recovery_email: EmailStr
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_email(cls, values: dict):
+        """
+        Validates email.
+        """
+        recovery_email = values.get("recovery_email")
+
+        # Validate email
+        try:
+            email_info = validate_email(recovery_email, check_deliverability=True)
+            domain = email_info.domain
+
+            if domain.count(".com") > 1:
+                raise ValueError("Email address contains multiple '.com' endings.")
+
+            if not validate_mx_record(domain):
+                raise ValueError("Email is invalid")
+
+        except EmailNotValidError as exc:
+            raise ValueError(f"Invalid email: {exc}") from exc
+        except Exception as exc:
+            raise ValueError(f"Email validation error: {exc}") from exc
+
+        return values
 
 
 class UserCreate(BaseModel):
@@ -120,15 +236,15 @@ class UserCreate(BaseModel):
 class UserID(BaseModel):
     """User ID format (String, Any UUID version)"""
 
-    id: Annotated[
+    user_id: Annotated[
         str,
         StringConstraints(pattern=UUID_REGEX),
     ]
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
+    email: EmailStr = "user@AuthSystem.com"
+    password: str = "AuthUser12@"
 
 
 class UserData(BaseModel):
@@ -140,7 +256,6 @@ class UserData(BaseModel):
     email: EmailStr
     recovery_email: EmailStr
     is_active: bool
-    is_deleted: bool = False
     is_verified: bool
     created_at: datetime
     updated_at: datetime
@@ -175,7 +290,7 @@ class AllUsersResponse(BaseModel):
     message: str
     status_code: int
     status: str = "success"
-    data: Union[List[UserData], List[None]]
+    data: Union[List[UserData]]
     pagination: HyperMedia
 
 
@@ -193,7 +308,6 @@ class AdminCreateUserResponse(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
-    totp_code: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -206,7 +320,6 @@ class LoginRequest(BaseModel):
 
         password = values.get("password")
         email = values.get("email")
-        totp_code = values.get("totp_code")
 
         # Ensure password is provided
         if not password:
@@ -236,14 +349,39 @@ class LoginRequest(BaseModel):
         except Exception as exc:
             raise ValueError(f"Email validation error: {exc}") from exc
 
-        # Validate TOTP code if provided
-        if totp_code:
-            from api.v1.schemas.totp_device import TOTPTokenSchema
-
-            if not TOTPTokenSchema.validate_totp_code(totp_code):
-                raise ValueError("TOTP code must be a 6-digit number")
-
         return values
+
+
+class LoginToken(BaseModel):
+    """User Tokens"""
+
+    acesss_token: str
+    refresh_token: str
+    scheme: str
+
+
+class RefreshTokenRequest(BaseModel):
+
+    refresh_token: str = Field(
+        ...,
+        description="Current valid user refresh token",
+        pattern=r"^ey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$",
+        example="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+    )
+
+
+class SwaggerLoginToken(BaseModel):
+    """token schema for swagger docs"""
+
+    access_token: str
+    token_type: str
+
+
+class LoginDataSchema(BaseModel):
+    """data schema to return during login"""
+
+    tokens: LoginToken
+    profile: UserData
 
 
 class LoginResponseModel(BaseModel):
@@ -251,15 +389,10 @@ class LoginResponseModel(BaseModel):
     Schema for successful login
     """
 
-    access_token: str
-    refresh_token: str
-
-
-class DeactivateUserSchema(BaseModel):
-    """Schema for deactivating a user"""
-
-    reason: Optional[str] = None
-    confirmation: bool
+    status: str
+    status_code: int = 200
+    message: str
+    data: LoginDataSchema
 
 
 class ChangePasswordSchema(BaseModel):
@@ -318,12 +451,6 @@ class ChangePasswordSchema(BaseModel):
         return values
 
 
-class RoleEnum(str, PyEnum):
-    ADMIN = "admin"
-    USER = "user"
-    MODERATOR = "moderator"
-
-
 class AccessTokenData(BaseModel):
     """schema for jwt access token data"""
 
@@ -336,3 +463,23 @@ class DeactivateUserSchema(BaseModel):
 
     reason: Optional[str] = None
     confirmation: bool
+
+
+class GeneralResponse(BaseModel):
+    """schema for reponses"""
+
+    message: str
+    status_code: int = 200
+    status: str = "success"
+
+
+class MagicLinkToken(BaseModel):
+    token: str = Field(
+        ...,
+        description="Magic link token",
+        example="Z0FBQUFBQm45LXU0QlZmNFBKSnlZN0o4TzYyVC1wYkJleHo3QXJCQUxJMmRSZ3ZDOS1SQ3FpZnd5SkRha1gtNGd1M09xRXNtMlltM0Jqd1FsdEp2WFNMQVNEQWZZcXBQNFhLMUJPa0hzSVd3SG1BbWVsS0lkWWUwQzBsc0YxMWJuMTBqT2x3cXpGTXg=",
+    )
+
+
+class MagicLinkRequest(BaseModel):
+    email: EmailStr = Field(...)

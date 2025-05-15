@@ -2,7 +2,7 @@ from logging.config import fileConfig
 from decouple import config
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
-from api.utils.settings import settings
+from api.utils.settings import settings, BASE_DIR
 from alembic import context
 import os
 
@@ -33,8 +33,15 @@ target_metadata = Base.metadata
 
 # Get the database URL from an environment variable
 database_url = settings.DB_URL if settings.DB_URL else None
-if not database_url:
-    raise ValueError("DB_URL environment variable is not set")
+if not database_url or database_url == "0":
+    if settings.DB_TYPE.lower() == "mysql":
+        database_url = f"mysql+pymysql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+    elif settings.DB_TYPE.lower() == "postgresql":
+        database_url = f"postgresql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+    elif settings.DB_TYPE.lower() == "sqlite":
+        database_url = f"sqlite:///{BASE_DIR}"
+    else: 
+        raise ValueError("DB_URL environment variable is not set")
 
 config = context.config
 # Interpret the config file for Python logging.

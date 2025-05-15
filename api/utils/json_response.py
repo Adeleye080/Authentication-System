@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 """This module contains the Json response class"""
-from enum import Enum
 from json import dumps
-from fastapi import status
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel
 from typing import Any, Dict, Optional
 
 
@@ -14,14 +11,14 @@ class JsonResponseDict(JSONResponse):
     def __init__(
         self,
         message: str,
+        status: Optional[str] = None,
         data: Optional[Dict[str, Any]] = None,
-        error: str = "",
         status_code: int = 200,
     ):
         """Initialize your response"""
         self.message = message
         self.data = data
-        self.error = error
+        self.status = status
         self.status_code = status_code
         super().__init__(
             content=jsonable_encoder(self.response()), status_code=status_code
@@ -32,7 +29,7 @@ class JsonResponseDict(JSONResponse):
             {
                 "message": self.message,
                 "data": self.data,
-                "error": self.error,
+                "status": self.status,
                 "status_code": self.status_code,
             }
         )
@@ -43,7 +40,7 @@ class JsonResponseDict(JSONResponse):
             {
                 "message": self.message,
                 "data": self.data,
-                "error": self.error,
+                "status": self.status,
                 "status_code": self.status_code,
             }
         )
@@ -51,17 +48,47 @@ class JsonResponseDict(JSONResponse):
     def response(self):
         """Return a json response dictionary"""
         if self.status_code < 300:
-            return {
+            response_dict = {
                 "message": self.message,
                 "data": self.data,
+                "status": self.status or "success",
                 "status_code": self.status_code,
             }
-        else:
-            return {
+            (
+                response_dict.pop("data", None)
+                if self.data is None or self.data == {}
+                else None
+            )
+            return response_dict
+
+        elif self.status_code == 401:
+            response_dict = {
                 "message": self.message,
-                "error": self.error,
+                "data": self.data,
+                "status": "unauthorized",
                 "status_code": self.status_code,
             }
+            response_dict.pop("data", None)
+            return response_dict
+        elif self.status_code == 409:
+            response_dict = {
+                "message": self.message,
+                "data": self.data,
+                "status": "failed",
+                "status_code": self.status_code,
+            }
+            response_dict.pop("data", None)
+            return response_dict
+
+        else:
+            response_dict = {
+                "message": self.message,
+                "data": self.data,
+                "status": "error" if self.status == "success" else self.status,
+                "status_code": self.status_code,
+            }
+            response_dict.pop("data", None)
+            return response_dict
 
 
 """
