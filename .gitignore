@@ -6,3 +6,12 @@ note.txt
 .qodo
 notes.txt
 notes*
+app.log
+test.py
+api/core/logging/app.log
+pwp*
+.gitignore
+trashbin/
+*.mmdb
+*.gz
+GeoLite2-*
