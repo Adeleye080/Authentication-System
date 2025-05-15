@@ -1008,6 +1008,14 @@ optional = false
 python-versions = ">=3.8"
 
 [[package]]
+name = "pytz"
+version = "2025.2"
+description = "World timezone definitions, modern and historical"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "qrcode"
 version = "8.1"
 description = "QR Code image generator"
@@ -1302,7 +1310,7 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "3e8e735eb426646e9c83edeb21b13bd80ed88537dc60f2da0da2d0bceba23edd"
+content-hash = "2c4ec2e9d694bea8b6193f006c0657ad03ec29f019056e4804680ce1ae0fcc3a"
 
 [metadata.files]
 aiohappyeyeballs = []
@@ -1383,6 +1391,7 @@ python-decouple = []
 python-dotenv = []
 python-jose = []
 python-multipart = []
+pytz = []
 qrcode = []
 "repoze.lru" = []
 requests = []
