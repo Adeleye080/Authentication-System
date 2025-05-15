@@ -28,11 +28,13 @@ class GeoIPResult:
         """Convert the GeoIPResult to a dictionary."""
         return {
             "ip_address": self.ip_address,
-            "country": self.country,
+            "country_name": self.country_name,
+            "country_code": self.country_code,
             "region": self.region,
             "city": self.city,
             "timezone": self.timezone,
-            "continent": self.continent,
+            "continent_name": self.continent_name,
+            "continent_code": self.continent_code,
             "success": self.success,
             "source": self.source,
         }
