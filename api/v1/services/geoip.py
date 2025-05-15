@@ -1,3 +1,13 @@
+"""
+GeoIP Service Module
+
+This module is responsible for handling geolocation services.
+It includes methods to get geolocation data from various sources, including MaxMind and public APIs.
+
+NOTE: THE RAISING OF EXCEPTIONS IN THIS MODULE IS INTENTIONAL. IT WON'T BREAK THE FLOW OF THE APPLICATION.
+It is expected that the calling code will handle these exceptions appropriately.
+"""
+
 import geoip2.database  # type: ignore
 import requests
 import logging
@@ -6,8 +16,13 @@ import re
 from typing import Callable, List, TypeVar, cast
 import datetime
 from api.v1.models.geoip_result import GeoIPResult
+from api.v1.models.country_blacklist import CountryBlacklist
 from api.utils.settings import settings
+from api.utils.user_device_agent import get_client_ip
 import pycountry_convert as pc  # type: ignore
+from fastapi import HTTPException, status, Depends, Request
+from db.database import get_db
+from sqlalchemy.orm import Session
 
 
 logger = logging.getLogger(__name__)
@@ -22,24 +37,38 @@ class GeoIPService:
     def __init__(self):
         self._maxmind_mmdb_database_path = settings.MAXMIND_MMDB_DATABASE_PATH
 
-    def get_geolocation(self, ip_address: str) -> GeoIPResult:
+    def get_geolocation_with_fallback(self, ip_address: str) -> GeoIPResult:
         """
-        Get geolocation data for a given IP address.
-
-        Args:
-            ip_address: The IP address to look up
-
-        Returns:
-            GeoIPResult object with geolocation data
+        Try MaxMind first, then fallback to public APIs in order.
         """
-        # Try MaxMind database first
-        if self._maxmind_mmdb_database_path:
-            result = self._get_geolocation_from_maxmind(ip_address)
+        # Try MaxMind
+        try:
+            result = self.get_geolocation_from_maxmind(ip_address)
             if result.success:
                 return result
+        except Exception as e:
+            logger.error(f"MaxMind lookup failed: {str(e)}")
 
-        # If MaxMind database fails, try fallback APIs
-        return self._get_geolocation_from_apis(ip_address)
+        # Fallback APIs
+        for api_method in [
+            self.get_geolocation_from_ip_api,
+            self.get_geolocation_from_ipwhois,
+            self.get_geolocation_from_ipapi,
+        ]:
+            try:
+                result = api_method(ip_address)
+                if result.success:
+                    if result.timezone:
+                        result.timezone = self.normalize_timezone_offset(
+                            result.timezone
+                        )
+                    return result
+            except Exception as e:
+                logger.error(f"{api_method.__name__} failed: {str(e)}")
+                continue
+
+        # All failed
+        return GeoIPResult(ip_address=ip_address, success=False, source="all_failed")
 
     def get_continent_from_country_code(self, country_code: str):
         """
@@ -70,56 +99,6 @@ class GeoIPService:
         except Exception as e:
             return f"Error: {str(e)}"
 
-    def api_fallback(self, apis: List[str]) -> Callable[[F], F]:
-        """
-        Decorator that provides API fallbacks when the decorated function fails.
-
-        Args:
-            apis: List of API endpoints to try as fallbacks
-        """
-
-        def decorator(func: F) -> F:
-            @functools.wraps(func)
-            def wrapper(ip_address: str) -> GeoIPResult:
-                # Try the original function (MaxMind database)
-                try:
-                    result = func(ip_address)
-                    if result.success:
-                        return result
-                except Exception as e:
-                    logger.error(f"MaxMind lookup failed: {str(e)}")
-
-                # If the original function failed, try each fallback API in order
-                for api in apis:
-                    try:
-                        if api == "ip-api.com":
-                            result = self.get_geolocation_from_ip_api(ip_address)
-                        elif api == "ipwho.is":
-                            result = self.get_geolocation_from_ipwhois(ip_address)
-                        elif api == "ipapi.co":
-                            result = self.get_geolocation_from_ipapi(ip_address)
-                        else:
-                            continue
-
-                        if result.success:
-                            if result.timezone:
-                                result.timezone = self.normalize_timezone_offset(
-                                    result.timezone
-                                )
-                            return result
-                    except Exception as e:
-                        logger.error(f"API {api} failed: {str(e)}")
-                        continue
-
-                # If all APIs failed, return a failed result
-                return GeoIPResult(
-                    ip_address=ip_address, success=False, source="all_failed"
-                )
-
-            return cast(F, wrapper)
-
-        return decorator
-
     def get_geolocation_from_ip_api(self, ip_address: str) -> GeoIPResult:
         """
         Get geolocation data from ip-api.com.
@@ -145,11 +124,11 @@ class GeoIPService:
 
         return GeoIPResult(
             ip_address=ip_address,
-            country_name=data.get("country", ""),
-            country_code=data.get("countryCode", ""),
-            region=data.get("regionName", ""),
-            city=data.get("city", ""),
-            timezone=data.get("timezone", ""),
+            country_name=data.get("country", "N/A"),
+            country_code=data.get("countryCode", "N/A"),
+            region=data.get("regionName", "N/A"),
+            city=data.get("city", "N/A"),
+            timezone=data.get("timezone", "N/A"),
             continent_name=self.get_continent_from_country_code(
                 data.get("countryCode", "")
             ),
@@ -160,7 +139,7 @@ class GeoIPService:
             source="ip-api.com",
         )
 
-    def get_geolocation_from_ipwhois(ip_address: str) -> GeoIPResult:
+    def get_geolocation_from_ipwhois(self, ip_address: str) -> GeoIPResult:
         """
         Get geolocation data from ipwho.is.
 
@@ -207,7 +186,7 @@ class GeoIPService:
             GeoIPResult object with geolocation data
         """
         url = f"https://ipapi.co/{ip_address}/json/"
-        response = requests.get(url, timeout=5)
+        response = requests.get(url, timeout=3)
 
         if response.status_code != 200:
             raise Exception(f"ipapi.co returned status code {response.status_code}")
@@ -248,7 +227,7 @@ class GeoIPService:
             Normalized timezone string
         """
         if not timezone:
-            return ""
+            return "N/A"
 
         # If already in UTC+X format, return as is
         if timezone.startswith("UTC") or re.match(r"[+-]\d{1,2}(:\d{2})?", timezone):
@@ -260,6 +239,7 @@ class GeoIPService:
 
             tz = pytz.timezone(timezone)
             offset = tz.utcoffset(datetime.datetime.now())
+
             if offset is None:
                 return timezone
 
@@ -272,7 +252,6 @@ class GeoIPService:
             # If pytz is not available or timezone is invalid, return as is
             return timezone
 
-    @api_fallback(["ip-api.com", "ipwho.is", "ipapi.co"])
     def get_geolocation_from_maxmind(self, ip_address: str) -> GeoIPResult:
         """
         Get geolocation data from MaxMind GeoIP database.
@@ -294,15 +273,17 @@ class GeoIPService:
                 # Extract data from the response
                 result = GeoIPResult(
                     ip_address=ip_address,
-                    country=city_response.country.name or "",
+                    country_name=city_response.country.name or "N/A",
+                    country_code=city_response.country.iso_code or "N/A",
                     region=(
                         city_response.subdivisions.most_specific.name
                         if city_response.subdivisions
-                        else ""
+                        else "N/A"
                     ),
                     city=city_response.city.name or "",
-                    timezone=city_response.location.time_zone or "",
-                    continent=city_response.continent.name or "",
+                    timezone=city_response.location.time_zone or "N/A",
+                    continent_code=city_response.continent.code or "N/A",
+                    continent_name=city_response.continent.name or "N/A",
                     success=True,
                     source="maxmind",
                 )
@@ -329,4 +310,56 @@ class GeoIPService:
         Returns:
             GeoIPResult object with geolocation data
         """
-        return self.get_geolocation_from_maxmind(ip_address)
+        return self.get_geolocation_with_fallback(ip_address)
+
+    def blacklisted_country_dependency_check(
+        self, request: Request, db: Session = Depends(get_db)
+    ):
+        """
+        Routes decorator to check if the IP address is from a blacklisted country.
+
+        Args:
+            request: The request object containing the IP address
+
+        Raises:
+            HTTPException: If the IP address is from a blacklisted country
+        """
+        ip_address = get_client_ip(request)
+
+        try:
+            result = self.get_geolocation_with_fallback(ip_address=ip_address)
+        except Exception as e:
+            logger.error(f"Error getting geolocation: {str(e)}")
+            raise HTTPException(
+                detail="Failed to get user geolocation",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        if not result:
+            raise HTTPException(
+                detail="Failed to get user geolocation",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        if not result.success:
+            logger.error(
+                f"Failed to get geolocation for IP address: {ip_address}, error: {result}. when checking blacklisted country"
+            )
+            pass
+
+        blacklisted_country = (
+            db.query(CountryBlacklist)
+            .filter(CountryBlacklist.country_code == result.country_code)
+            .first()
+        )
+
+        if not blacklisted_country:
+            return
+
+        if result.country_code == blacklisted_country.country_code:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access from your country ({result.country_code}) is restricted due to policy. If you believe this is an error, please contact support.",
+            )
+
+        return False
