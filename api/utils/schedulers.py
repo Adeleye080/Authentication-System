@@ -77,17 +77,17 @@ def download_and_update_geolite_db():
     """
     Download and extract the latest MaxMind GeoLite2 City database.
     """
-    # You must have a MaxMind license key (get it from your MaxMind account)
     license_key = settings.MAXMIND_LICENSE_KEY
-    # do wget request to get the download URL, pass 'user' and 'password' (i.e --user='maxmind account id', --password='maxmind license key')
+    account_id = settings.MAXMIND_ACCOUNT_ID
+
     download_url = f"https://download.maxmind.com/geoip/databases/GeoLite2-City/download?suffix=tar.gz"
     target_dir = os.path.dirname(settings.MAXMIND_MMDB_DATABASE_PATH)
     os.makedirs(target_dir, exist_ok=True)
 
     archive_path = os.path.join(target_dir, "GeoLite2-City.tar.gz")
 
-    # Download the archive
-    response = requests.get(download_url, stream=True)
+    # Use HTTP Basic Auth to authenticate (equivalent to wget --user/--password)
+    response = requests.get(download_url, stream=True, auth=(account_id, license_key))
     if response.status_code != 200:
         raise Exception(f"Failed to download GeoLite2 database: {response.text}")
 
@@ -112,9 +112,10 @@ def download_and_update_geolite_db():
     os.remove(archive_path)
 
 
-# Schedule the job to run once a week (or as needed)
 scheduler.add_job(download_and_update_geolite_db, "interval", weeks=1)
-
-
-# Schedule the job to run every hour
 scheduler.add_job(delete_revoked_and_expired_refresh_token, "interval", hours=1)
+
+
+# run job manually on app start_up
+# ensure to check the mmdb last update time (if > 5 days)
+# download_and_update_geolite_db()
