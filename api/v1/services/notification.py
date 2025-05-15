@@ -97,7 +97,7 @@ class Notification:
     def send_welcome_mail(self, user: User, bgt: BackgroundTasks) -> None:
         """
         sends "welcome to the platform" mail to user. \n
-        use upon successfull usre verification
+        use upon successfull user verification or user creation via oauth2
         """
 
         pass
