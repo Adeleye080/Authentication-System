@@ -46,6 +46,7 @@ from api.v1.services import (
     audit_log_service,
     devices_service,
     notification_service,
+    geoip_service,
 )
 
 
@@ -62,11 +63,14 @@ async def login(
     data: UserLogin,
     bgt: BackgroundTasks,
     db: Session = Depends(get_db),
+    validate_request_country_in_blacklist=Depends(
+        geoip_service.blacklisted_country_dependency_check
+    ),
 ):
     """Logs client in
 
-    **Cient may be regular users, moderator of admin
-
+    **Client may be regular users, moderator of admin
+    **This endpoint is used to log in users using their email and password.
     **Payload:**
 
         - `email`
@@ -447,6 +451,8 @@ async def change_password(
     status_code=status.HTTP_200_OK,
 )
 async def verify_email(
+    bgt: BackgroundTasks,
+    request: Request,
     token: str = Query(..., description="verification token"),
     db: Session = Depends(get_db),
 ):
@@ -456,10 +462,6 @@ async def verify_email(
     user_email = decrypt_verification_token(token)
 
     user = user_service.fetch(db=db, email=user_email)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User does not exist"
-        )
 
     # Check if user is already verified
     if user.is_verified:
@@ -472,7 +474,29 @@ async def verify_email(
     user.is_active = True
     user.save(db=db)
 
+    # send notification to user
+    notification_service.send_welcome_mail(user=user, bgt=bgt)
+
     # loging the event in audit logs
+    device_info = await get_device_info(request)
+    log_description = "User email verified"
+    try:
+        schema = AuditLogCreate(
+            user_id=user.id,
+            event=AuditLogEventEnum.VERIFY_EMAIL,
+            description=log_description,
+            ip_address=device_info.get("ip_address", "N/A"),
+            user_agent=device_info.get("user_agent", "N/A"),
+            status=AuditLogStatuses.SUCCESS,
+        )
+        audit_log_service.log(db=db, schema=schema, background_task=bgt)
+
+        # log to logger
+        logger.info(f"Audit Log ({user.email}) email verified")
+    except Exception as exc:
+        logger.info(
+            f"Failed to Audit Log ({user.email}) email verification, error {exc}"
+        )
 
     return JsonResponseDict(
         message="Email verified",
@@ -509,14 +533,14 @@ async def resend_verification(
     device_info = await get_device_info(request)
 
     # loging the event in audit logs
-    log_description = "User requested email verification link"
+    log_description = "User requested resend of email verification link"
     try:
         schema = AuditLogCreate(
             user_id=user.id,
             event=AuditLogEventEnum.REQUEST_VERIFICATION,
             description=log_description,
-            ip_address=device_info.get("ip_address"),
-            user_agent=device_info.get("user_agent"),
+            ip_address=device_info.get("ip_address", "N/A"),
+            user_agent=device_info.get("user_agent", "N/A"),
             status=AuditLogStatuses.SUCCESS,
         )
         audit_log_service.log(db=db, schema=schema, background_task=bgt)
