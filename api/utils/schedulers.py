@@ -1,13 +1,14 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore
 from sqlalchemy.exc import SQLAlchemyError
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from db.database import get_db
 import os
 import requests
 import shutil
 from api.utils.settings import settings
 from api.v1.models.mmdb import MMDB_TRACKER
+from api.v1.models.audit_logs import AuditLog
 
 
 scheduler = AsyncIOScheduler()
@@ -77,6 +78,9 @@ def download_and_update_geolite_db():
     """
     Download and extract the latest MaxMind GeoLite2 City database.
     """
+
+    # check if mmdb exist in path, download automatically if it doesnt
+
     mmdb_tracker = MMDB_TRACKER()
     if mmdb_tracker.last_update_expired():
         return
@@ -118,10 +122,26 @@ def download_and_update_geolite_db():
     mmdb_tracker.update_tracker()
 
 
-scheduler.add_job(download_and_update_geolite_db, "interval", weeks=1)
+def delete_expired_audit_logs():
+    """Deletes audit logs older than the specified lifetime"""
+
+    life_time = datetime.now(tz=timezone.utc) + timedelta(
+        days=settings.AUDIT_LOGS_LIFETIME
+    )
+    db_generator = get_db()
+    db = next(db_generator)
+
+    try:
+        db.query(AuditLog).filter(AuditLog.timestamp > life_time).delete(
+            synchronize_session=False
+        )
+    finally:
+        db_generator.close()
+
+
+scheduler.add_job(download_and_update_geolite_db, "interval", days=3)
 scheduler.add_job(delete_revoked_and_expired_refresh_token, "interval", hours=1)
 
 
 # run job manually on app start_up
-# ensure to check the mmdb last update time (if > 5 days)
-# download_and_update_geolite_db()
+download_and_update_geolite_db()
