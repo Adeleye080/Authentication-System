@@ -121,5 +121,7 @@ class Settings(BaseSettings):
         default=f"{BASE_DIR}/geoip/GeoLite2-City.mmdb",
     )
 
+    AUDIT_LOGS_LIFETIME: int = config("AUDIT_LOGS_LIFETIME", cast=int, default=90)
+
 
 settings = Settings()
