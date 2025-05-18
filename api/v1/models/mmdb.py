@@ -29,7 +29,7 @@ class MMDB_TRACKER(BaseModel):
         db = next(db_generator)
 
         try:
-            tracker_object: List[MMDB_TRACKER] = db.query(self).all()
+            tracker_object: List[MMDB_TRACKER] = db.query(MMDB_TRACKER).all()
 
             if tracker_object:
 
@@ -54,14 +54,16 @@ class MMDB_TRACKER(BaseModel):
         checks if the last mmdb update is expired
         The system considers mmdb age of 5 or more days expired.
         they remain in use until updates are made.
-        Returns: `True` if expired, `False` otherwise.
+        Returns: `True` if expired or if no tracker exist, `False` otherwise.
         """
 
         db_generator = get_db()
         db = next(db_generator)
 
         try:
-            last_update_tracker: MMDB_TRACKER = db.query(self).first()
+            last_update_tracker: MMDB_TRACKER = db.query(MMDB_TRACKER).first()
+            if not last_update_tracker:
+                return True
             track_time = last_update_tracker.updated_at + timedelta(days=5)
         finally:
             db_generator.close()
