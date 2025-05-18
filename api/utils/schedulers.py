@@ -5,9 +5,9 @@ from datetime import datetime, timezone
 from db.database import get_db
 import os
 import requests
-import gzip
 import shutil
 from api.utils.settings import settings
+from api.v1.models.mmdb import MMDB_TRACKER
 
 
 scheduler = AsyncIOScheduler()
@@ -77,6 +77,10 @@ def download_and_update_geolite_db():
     """
     Download and extract the latest MaxMind GeoLite2 City database.
     """
+    mmdb_tracker = MMDB_TRACKER()
+    if mmdb_tracker.last_update_expired():
+        return
+
     license_key = settings.MAXMIND_LICENSE_KEY
     account_id = settings.MAXMIND_ACCOUNT_ID
 
@@ -110,6 +114,8 @@ def download_and_update_geolite_db():
 
     # Clean up
     os.remove(archive_path)
+    # update age tracker
+    mmdb_tracker.update_tracker()
 
 
 scheduler.add_job(download_and_update_geolite_db, "interval", weeks=1)
