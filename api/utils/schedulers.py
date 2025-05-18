@@ -12,7 +12,7 @@ from api.v1.models.audit_logs import AuditLog
 
 
 scheduler = AsyncIOScheduler()
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 async def delete_revoked_and_expired_refresh_token():
@@ -80,6 +80,8 @@ def download_and_update_geolite_db():
     """
 
     # check if mmdb exist in path, download automatically if it doesnt
+
+    logger.info("Running function to download/update GeoLits-2 MMDB...")
 
     mmdb_tracker = MMDB_TRACKER()
     if mmdb_tracker.last_update_expired():
