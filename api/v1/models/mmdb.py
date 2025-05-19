@@ -7,6 +7,7 @@ from api.v1.models.base_model import BaseModel
 from db.database import get_db
 from datetime import datetime, timezone, timedelta
 from typing import List
+from sqlalchemy import func
 
 
 class MMDB_TRACKER(BaseModel):
@@ -19,6 +20,18 @@ class MMDB_TRACKER(BaseModel):
 
     __tablename__ = "auth_mmdb_tracker"
     __table_args__ = {"extend_existing": True}
+
+    def __init__(self):
+        """create tracker if it doesn't exist"""
+        db_generator = get_db()
+        db = next(db_generator)
+
+        try:
+            if db.query(func.count(MMDB_TRACKER.id)).scalar() == 0:
+                db.add(self)
+                db.commit()
+        finally:
+            db_generator.close()
 
     def update_tracker(self):
         """
@@ -65,9 +78,15 @@ class MMDB_TRACKER(BaseModel):
             if not last_update_tracker:
                 return True
             track_time = last_update_tracker.updated_at + timedelta(days=5)
+            dialect = db.bind.dialect.name
         finally:
             db_generator.close()
 
-        if track_time > datetime.now(tz=timezone.utc):
+        if dialect == "postgresql":
+            now = datetime.now(tz=timezone.utc)
+        else:
+            now = datetime.now()
+
+        if track_time > now:
             return False
         return True
