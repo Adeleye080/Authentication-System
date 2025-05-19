@@ -236,6 +236,8 @@ async def request_magic_link_login(
 )
 async def magic_link_login(
     schema: MagicLinkToken,
+    bgt: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """verifies magic link token and logs user in"""
@@ -244,8 +246,6 @@ async def magic_link_login(
     # generate user tokens
     user_access_token = user_service.create_access_token(user_obj=user, db=db)
     user_refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
-
-    # loging the event in audit logs
 
     user.email  # essential to load the user object attributes.
 
@@ -277,6 +277,21 @@ async def magic_link_login(
             expires=settings.JWT_REFRESH_EXPIRY,
         )
 
+        # loging the event in audit logs
+        device_info = await get_device_info(request)
+        audit_log_service.log(
+            db=db,
+            schema=AuditLogCreate(
+                user_id=user.id,
+                event=AuditLogEventEnum.LOGIN,
+                description="User logged in using magic link",
+                status=AuditLogStatuses.SUCCESS,
+                ip_address=device_info.get("ip_address", "N/A"),
+                user_agent=device_info.get("user_agent", "N/A"),
+            ),
+            background_task=bgt,
+        )
+
     return response
 
 
@@ -297,14 +312,16 @@ async def logout(
                 status_code=exc.status_code,
             )
 
-        # perform other logic such as clearing cookies
-        # loging the event in audit logs
-
-        return JsonResponseDict(
+        response = JsonResponseDict(
             message="Logout was successful",
             status="success",
             status_code=status.HTTP_200_OK,
         )
+        if settings.ALLOW_AUTH_COOKIES:
+            response.delete_cookie(key="access_token")
+            response.delete_cookie(key="refresh_token")
+
+        return response
     else:
         return JsonResponseDict(
             message="Refresh token is required",
