@@ -565,7 +565,6 @@ class UserService(Service):
         refresh_token.revoked = True
         db.add(refresh_token)
         db.commit()
-        db.refresh(refresh_token)
 
     def refresh_access_token(
         self, db: Session, current_refresh_token: str
