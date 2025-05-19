@@ -162,6 +162,6 @@ def delete_expired_audit_logs():
         db_generator.close()
 
 
-scheduler.add_job(download_and_update_geolite_db, "interval", minutes=1)
+scheduler.add_job(download_and_update_geolite_db, "interval", days=3)
 scheduler.add_job(delete_revoked_and_expired_refresh_token, "interval", hours=1)
 scheduler.add_job(delete_expired_audit_logs, "interval", days=1)
