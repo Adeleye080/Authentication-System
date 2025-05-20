@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     )  # 30 days
     ALLOW_AUTH_COOKIES: bool = config("ALLOW_AUTH_COOKIES", cast=bool, default=True)
     AUTH_SECURE_COOKIES: bool = config("SECURE_COOKIES", cast=bool, default=True)
-    AUTH_SAME_SITE: str = config("SAME_SITE", cast=str, default="None")
+    AUTH_SAME_SITE: str = config("SAME_SITE", cast=str, default="strict")
 
     # DATABASE CONFIG
     DB_HOST: str = config("DB_HOST")
@@ -120,6 +120,8 @@ class Settings(BaseSettings):
         cast=str,
         default=f"{BASE_DIR}/geoip/GeoLite2-City.mmdb",
     )
+
+    AUDIT_LOGS_LIFETIME: int = config("AUDIT_LOGS_LIFETIME", cast=int, default=90)
 
 
 settings = Settings()

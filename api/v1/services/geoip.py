@@ -11,9 +11,8 @@ It is expected that the calling code will handle these exceptions appropriately.
 import geoip2.database  # type: ignore
 import requests
 import logging
-import functools
 import re
-from typing import Callable, List, TypeVar, cast
+from typing import Callable, TypeVar
 import datetime
 from api.v1.models.geoip_result import GeoIPResult
 from api.v1.models.country_blacklist import CountryBlacklist

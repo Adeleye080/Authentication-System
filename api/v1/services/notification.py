@@ -19,10 +19,6 @@ class Notification:
     All methods are background tasks
     """
 
-    def send_push_notification():
-        """ """
-        pass
-
     def send_verify_email_mail(self, user: User, bgt: BackgroundTasks) -> None:
         """send email asking user to verify their email
 
@@ -70,10 +66,8 @@ class Notification:
                 "magicLink": magic_link,
             },
         )
-
-        # should return None
-        # return None
-        return magic_link
+        print("magic link: ", magic_link)
+        return None
 
     def send_password_reset_mail(self, user: User, bgt: BackgroundTasks) -> None:
         """Send password reset link to user"""
@@ -100,4 +94,13 @@ class Notification:
         use upon successfull user verification or user creation via oauth2
         """
 
-        pass
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Welcome to the platform",
+            template_name="welcome_template.html",
+            template_context={
+                "username": user.email,
+                "dashboardLink": settings.FRONTEND_HOME_URL.strip("/"),
+            },
+        )

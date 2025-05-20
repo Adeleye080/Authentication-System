@@ -1,17 +1,32 @@
-from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore
+"""Scheduler for background tasks.
+This module uses APScheduler to schedule tasks such as downloading and updating the MaxMind GeoLite2 database,
+deleting expired and revoked refresh tokens, and deleting expired audit logs.
+"""
+
+from apscheduler.schedulers.background import BackgroundScheduler  # type: ignore
+from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor  # type: ignore
 from sqlalchemy.exc import SQLAlchemyError
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from db.database import get_db
 import os
 import requests
-import gzip
 import shutil
 from api.utils.settings import settings
+from api.v1.models.mmdb import MMDB_TRACKER
+from api.v1.models.audit_logs import AuditLog
 
 
-scheduler = AsyncIOScheduler()
-logger = logging.getLogger()
+executors = {
+    "default": ThreadPoolExecutor(5),
+    "processpool": ProcessPoolExecutor(2),
+}
+
+scheduler = BackgroundScheduler(executors=executors)
+# Set the timezone to UTC
+scheduler.configure(timezone=timezone.utc)
+
+logger = logging.getLogger(__name__)
 
 
 async def delete_revoked_and_expired_refresh_token():
@@ -77,6 +92,21 @@ def download_and_update_geolite_db():
     """
     Download and extract the latest MaxMind GeoLite2 City database.
     """
+
+    # check if mmdb exist in path, download automatically if it doesnt
+    logger.info("Checking if MMDB exists in path...")
+
+    mmdb_tracker = MMDB_TRACKER()
+    if not mmdb_tracker.last_update_expired() and os.path.exists(
+        settings.MAXMIND_MMDB_DATABASE_PATH
+    ):
+        logger.info("MMDB is up to date, download function skipped!")
+        return
+
+    logger.info(
+        "MMDB not up to date, Running function to download/update GeoLite2 MMDB..."
+    )
+
     license_key = settings.MAXMIND_LICENSE_KEY
     account_id = settings.MAXMIND_ACCOUNT_ID
 
@@ -89,7 +119,8 @@ def download_and_update_geolite_db():
     # Use HTTP Basic Auth to authenticate (equivalent to wget --user/--password)
     response = requests.get(download_url, stream=True, auth=(account_id, license_key))
     if response.status_code != 200:
-        raise Exception(f"Failed to download GeoLite2 database: {response.text}")
+        logger.fatal(f"Failed to download GeoLite2 database: {response.text}")
+        return
 
     with open(archive_path, "wb") as f:
         for chunk in response.iter_content(chunk_size=8192):
@@ -110,12 +141,27 @@ def download_and_update_geolite_db():
 
     # Clean up
     os.remove(archive_path)
+    # update age tracker
+    mmdb_tracker.update_tracker()
 
 
-scheduler.add_job(download_and_update_geolite_db, "interval", weeks=1)
+def delete_expired_audit_logs():
+    """Deletes audit logs older than the specified lifetime"""
+
+    life_time = datetime.now(tz=timezone.utc) + timedelta(
+        days=settings.AUDIT_LOGS_LIFETIME
+    )
+    db_generator = get_db()
+    db = next(db_generator)
+
+    try:
+        db.query(AuditLog).filter(AuditLog.timestamp > life_time).delete(
+            synchronize_session=False
+        )
+    finally:
+        db_generator.close()
+
+
+scheduler.add_job(download_and_update_geolite_db, "interval", days=3)
 scheduler.add_job(delete_revoked_and_expired_refresh_token, "interval", hours=1)
-
-
-# run job manually on app start_up
-# ensure to check the mmdb last update time (if > 5 days)
-# download_and_update_geolite_db()
+scheduler.add_job(delete_expired_audit_logs, "interval", days=1)
