@@ -24,23 +24,23 @@ from api.v1.schemas.audit_logs import (
 )
 
 
-two_factor_auth_router = APIRouter(tags=["MFA"], prefix="/mfa")
+two_factor_auth_router = APIRouter(tags=["2FA"], prefix="/2fa")
 
 
 @two_factor_auth_router.get("/methods", status_code=status.HTTP_200_OK)
-async def get_user_mfa_methods(
+async def get_user_2fa_methods(
     user: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Get user MFA methods
+    Get user 2FA methods
     """
 
     user_service.perform_user_check(user=user)
 
     if not user.totp_device and not user.mfa_sms_enabled:
         return JsonResponseDict(
-            message="User does not have any MFA methods",
+            message="User does not have any 2FA methods",
             status_code=status.HTTP_200_OK,
             data={"methods": []},
         )
@@ -225,7 +225,7 @@ async def verify_totp(
             schema=AuditLogCreate(
                 user_id=user.id,
                 event=AuditLogEventEnum.LOGIN,
-                description="user logged in",
+                description="user logged in with 2FA using TOTP",
                 status=AuditLogStatuses.SUCCESS,
                 ip_address=device_info.get("ip_address"),
                 user_agent=device_info.get("user_agent"),
@@ -239,7 +239,7 @@ async def verify_totp(
 
 @two_factor_auth_router.post(
     "/sms/request-otp",
-    summary="Send OTP code via Email/SMS",
+    summary="Send OTP code via SMS",
     status_code=status.HTTP_200_OK,
 )
 async def request_email_sms_otp_code(

@@ -48,11 +48,18 @@ class Device(BaseModel):
     def __repr__(self):
         return f"<UserDevice(id={self.id}, user_id={self.user_id}, device_name={self.device_name})>"
 
-    def to_dict(self, hide_user_agent_string: bool = True) -> dict:
+    def to_dict(self, hide_sensitive_info: bool = True) -> dict:
         """returns a dictionary representation of the instance"""
         info = super().to_dict()
         info["last_used"] = self.last_used.isoformat() if self.last_used else None
-        if hide_user_agent_string:
-            info.pop("user_agent_string")
+        if hide_sensitive_info:
+            info.pop("user_agent_string", None)
+            info.pop("id", None)
+            info.pop("created_at", None)
+            info.pop("updated_at", None)
+            info.pop("user_id", None)
+            info["device_fingerprint"] = (
+                info["device_fingerprint"][:4] + "..." + info["device_fingerprint"][-4:]
+            )
 
         return info

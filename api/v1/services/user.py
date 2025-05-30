@@ -54,6 +54,8 @@ class UserService(Service):
             db.commit()
             db.refresh(user)
         except Exception as exc:
+            # log error
+            print(exc)
             raise HTTPException(status_code=500, detail="There was a database error")
 
         return user
@@ -394,6 +396,7 @@ class UserService(Service):
 
             encoded_jwt = jwt.encode(data, settings.SECRET_KEY, settings.ALGORITHM)
         except Exception as exc:
+            print(exc)
             raise HTTPException(
                 status_code=500, detail="Failed to generate user access token"
             ) from exc

@@ -50,6 +50,7 @@ class AuditLogEventEnum(str, PyEnum):
     DELETE_USER = "DELETED A USER"
     DELETE_SELF = "SOFT-DELETE SELF ACCOUNT"
     HARD_DELETE = "HARD DELETE A USER"
+    VERIFY_EMAIL = "USER VERIFIED THEIR EMAIL"
 
 
 class AuditLogStatuses(str, PyEnum):

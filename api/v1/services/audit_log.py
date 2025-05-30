@@ -3,7 +3,7 @@ Audit Logging Module
 """
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, desc
 from fastapi import HTTPException, status
 from fastapi import BackgroundTasks
 from db.database import get_db
@@ -19,10 +19,10 @@ logger = logging.getLogger(__name__)
 class AuditLogService:
     """ """
 
-    def get(self, db: Session, log_id: str):
+    def get(self, db: Session, log_id: int):
         """Get A single Audit Log"""
 
-        log = db.query(AuditLog).filter_by(AuditLog.id == log_id).first()
+        log = db.query(AuditLog).filter(AuditLog.id == log_id).first()
         if not log:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -100,14 +100,14 @@ class AuditLogService:
 
     def retrieve_user_logs(
         self, db: Session, user_id: str, page: int = 1, per_page: int = 50
-    ) -> Tuple[List[AuditLog], any]:
+    ) -> Tuple[List[AuditLog], int]:
         """Retrieves logs belonging to a user
 
-        Args:
-            - page: page number
-            - per_page: number of items per page
 
-        Returns:
+        :param page: page number
+        :param per_page: number of items per page
+
+        Returns: (logs, overall_logs_total)
         """
         # Calculate the offset for pagination
         offset = (page - 1) * per_page
@@ -115,6 +115,7 @@ class AuditLogService:
         logs = (
             db.query(AuditLog)
             .filter(AuditLog.user_id == user_id)
+            .order_by(desc(AuditLog.timestamp))
             .offset(offset)
             .limit(per_page)
             .all()

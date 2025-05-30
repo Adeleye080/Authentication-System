@@ -153,7 +153,7 @@ async def login(
         schema=AuditLogCreate(
             user_id=user.id,
             event=AuditLogEventEnum.LOGIN,
-            description="user logged in",
+            description="user logged in with password",
             status=AuditLogStatuses.SUCCESS,
             ip_address=device_info.get("ip_address"),
             user_agent=device_info.get("user_agent"),

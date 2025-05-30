@@ -122,7 +122,7 @@ async def get_all_auth_users(
     if not any([user.is_superadmin, user.is_moderator]):
         raise HTTPException(
             detail="You are not authorized to access this resource",
-            status_code=status.HTTP_400_UNATHORIZED,
+            status_code=status.HTTP_401_UNAUTHORIZED,
         )
 
     page = max(page, 1)
