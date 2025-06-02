@@ -19,6 +19,7 @@ from api.v1.models.country_blacklist import CountryBlacklist
 from api.utils.settings import settings
 from api.utils.user_device_agent import get_client_ip
 import pycountry_convert as pc  # type: ignore
+import pycountry  # type: ignore
 from fastapi import HTTPException, status, Depends, Request
 from db.database import get_db
 from sqlalchemy.orm import Session
@@ -97,6 +98,19 @@ class GeoIPService:
             return continent_code
         except Exception as e:
             return f"Error: {str(e)}"
+
+    def get_country_name_from_iso_code(self, country_code: str) -> str:
+        """
+        Get the country name from an ISO Alpha-2 country code.
+        Raises ValueError if the code is invalid.
+        """
+        country = pycountry.countries.get(alpha_2=country_code.upper())
+        if not country:
+            raise HTTPException(
+                detail=f"Unknown country code: {country_code}",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        return country.name
 
     def get_geolocation_from_ip_api(self, ip_address: str) -> GeoIPResult:
         """
