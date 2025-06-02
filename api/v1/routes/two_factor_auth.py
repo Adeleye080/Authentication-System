@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
-from api.v1.services import user_service
-from api.v1.services import totp_service
-from api.v1.services import audit_log_service
+from api.v1.services import (
+    user_service,
+    totp_service,
+    audit_log_service,
+    devices_service,
+)
 from api.utils.json_response import JsonResponseDict
 from api.utils.responses import auth_response
 from api.utils.user_device_agent import get_client_ip, get_device_info
@@ -22,45 +25,10 @@ from api.v1.schemas.audit_logs import (
     AuditLogEventEnum,
     AuditLogStatuses,
 )
+from datetime import datetime as dt
 
 
 two_factor_auth_router = APIRouter(tags=["2FA"], prefix="/2fa")
-
-
-@two_factor_auth_router.get("/methods", status_code=status.HTTP_200_OK)
-async def get_user_2fa_methods(
-    user: User = Depends(user_service.get_current_user),
-    db: Session = Depends(get_db),
-):
-    """
-    Get user 2FA methods
-    """
-
-    user_service.perform_user_check(user=user)
-
-    if not user.totp_device and not user.mfa_sms_enabled:
-        return JsonResponseDict(
-            message="User does not have any 2FA methods",
-            status_code=status.HTTP_200_OK,
-            data={"methods": []},
-        )
-
-    methods = []  # initialize method list
-
-    if user.mfa_enabled and user.totp_device:
-        totp_method = {
-            "type": "TOTP",
-            "enabled": user.totp_device.confirmed,
-            "last_used": user.totp_device.last_used,
-            "can_disable": True,
-        }
-        methods.append(totp_method)
-
-    return JsonResponseDict(
-        message="Retrieved user MFA methods",
-        status_code=status.HTTP_200_OK,
-        data={"methods": [user.totp_device]},
-    )
 
 
 # rate limit to 5 or 2 requests per day
@@ -144,7 +112,6 @@ async def verify_totp(
     Verifies Authenticator app generated TOTP code for user login or completes TOTP(2FA) setup if user already have OTP device.
 
     - **email**: email of user account to setup or verify 2fa
-    - **username**: username of user account to setup or verify 2fa
     - **otp**: OTP code to verify
     - **temp_code:** temporary code to verify user identity. supply if it is a login attempt
     """
@@ -184,15 +151,24 @@ async def verify_totp(
                 detail="Wrong temporary login token",
             )
 
-        access_token = user_service.create_access_token(user_id=user.id)
+        access_token = user_service.create_access_token(user_obj=user, db=db)
         refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
 
-        user.username  # load object attrs
+        user.email  # load object attrs
+        user.login_initiated = False
+        user.save(db=db)
+
+        # save user device info
+        device_info = await get_device_info(request)
+        if device_info:
+            devices_service.create_with_bgt(
+                db=db, owner=user, device_info=device_info, bgt=bgt
+            )
 
         response = auth_response(
             status="success",
             status_code=200,
-            message="Login was successful",
+            message="Login successful",
             user_data=user.to_dict(),
             refresh_token=refresh_token,
             access_token=access_token,
@@ -218,7 +194,6 @@ async def verify_totp(
             )
 
         # log to audit
-        device_info = await get_device_info(request)
         audit_log_service.log(
             db=db,
             background_task=bgt,
@@ -231,8 +206,6 @@ async def verify_totp(
                 user_agent=device_info.get("user_agent"),
             ),
         )
-
-        # Notify user of successful login
 
         return response
 
@@ -253,8 +226,6 @@ async def request_email_sms_otp_code(
 
     if request_data.email:
         user = user_service.fetch(db=db, email=request_data.email)
-    # elif request_data.username:
-    #     user = user_service.fetch(db=get_db(), username=request_data.username)
 
     # generate OTP code, save it and send to user
 
