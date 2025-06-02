@@ -41,6 +41,7 @@ httpx = "^0.28.1"
 itsdangerous = "^2.2.0"
 pycountry-convert = "^0.7.2"
 pytz = "^2025.2"
+pycountry = "^24.6.1"
 
 [tool.poetry.dev-dependencies]
 
