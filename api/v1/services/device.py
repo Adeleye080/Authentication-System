@@ -105,11 +105,12 @@ class DevicesService:
         """
         bgt.add_task(self.create, db=db, device_info=device_info, owner=owner)
 
-    def delete(self, db: Session, device_id):
+    def delete(self, db: Session, device_id) -> None:
         """
         Delete a device
         """
-        db.delete(device_id)
+        device = self.get(db=db, device_id=device_id)
+        db.delete(device)
         db.commit()
         return
 
