@@ -4,10 +4,12 @@ Handles all user device related operations in the database
 """
 
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, BackgroundTasks
+from api.utils.user_device_agent import generate_device_fingerprint
 from api.v1.models.device import Device
 from api.v1.models.user import User
 from typing import Dict
+from datetime import datetime as dt
 
 
 class DevicesService:
@@ -55,7 +57,6 @@ class DevicesService:
         """
         Create a new device
         """
-        from api.utils.user_device_agent import generate_device_fingerprint
 
         device_fingerprint = generate_device_fingerprint(device_info.get("user_agent"))
         device_exists = (
@@ -67,6 +68,12 @@ class DevicesService:
             .first()
         )
         if device_exists:
+            # update the last_used time
+            self.update_device_last_used_time(
+                db=db,
+                user_agent_string=device_info.get("user_agent", None),
+                device_obj=device_exists,
+            )
             return
 
         device_info.update(
@@ -88,6 +95,16 @@ class DevicesService:
         db.refresh(device)
         return device
 
+    def create_with_bgt(
+        self, db: Session, device_info: Dict, owner: User, bgt: BackgroundTasks
+    ):
+        """
+        Create a new device in the background.
+        won't create anything if device already exist. It also updates the
+        last used time if device already exists.
+        """
+        bgt.add_task(self.create, db=db, device_info=device_info, owner=owner)
+
     def delete(self, db: Session, device_id):
         """
         Delete a device
@@ -102,4 +119,33 @@ class DevicesService:
         """
         db.query(Device).filter(Device.user_id == user_id).delete()
         db.commit()
+        return
+
+    def update_device_last_used_time(
+        self, db: Session, user_agent_string: str = None, device_obj: Device = None
+    ) -> None:
+        """update last used time of current device in use."""
+
+        if not user_agent_string:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown Device"
+            )
+
+        if device_obj:
+            existing_device = device_obj
+        else:
+            new_fingerprint = generate_device_fingerprint(user_agent_string)
+            existing_device: Device = (
+                db.query(Device)
+                .filter_by(Device.device_fingerprint == new_fingerprint)
+                .first()
+            )
+
+        if existing_device:
+            existing_device.last_used = dt.datetime.now(dt.timezone.utc)
+            existing_device.save()
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown Device"
+            )
         return
