@@ -116,6 +116,13 @@ async def login(
 
     user.email  # load object attrs
 
+    # save user device info
+    device_info = await get_device_info(request)
+    if device_info:
+        devices_service.create_with_bgt(
+            db=db, owner=user, device_info=device_info, bgt=bgt
+        )
+
     response = auth_response(
         status="success",
         status_code=200,
@@ -146,7 +153,6 @@ async def login(
         )
 
     # audit log
-    device_info = await get_device_info(request)
     audit_log_service.log(
         db=db,
         background_task=bgt,
@@ -206,7 +212,7 @@ async def request_magic_link_login(
     user_service.perform_user_check(user=user)
 
     # send magic link mail to user
-    link = notification_service.send_magic_link_mail(user=user, bgt=bgt)
+    notification_service.send_magic_link_mail(user=user, bgt=bgt)
 
     # loging the event in audit logs
     device_info = await get_device_info(request)
@@ -247,12 +253,19 @@ async def magic_link_login(
     user_access_token = user_service.create_access_token(user_obj=user, db=db)
     user_refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
 
-    user.email  # essential to load the user object attributes.
+    user.email  # load the user object attributes.
+
+    # save user device info (if new device)
+    device_info = await get_device_info(request)
+    if device_info:
+        devices_service.create_with_bgt(
+            db=db, owner=user, device_info=device_info, bgt=bgt
+        )
 
     response = auth_response(
         status="success",
         status_code=200,
-        message="Login was successful",
+        message="Login successful",
         user_data=user.to_dict(),
         refresh_token=user_refresh_token,
         access_token=user_access_token,
@@ -332,6 +345,8 @@ async def logout(
 @auth_router.post("/refresh", status_code=status.HTTP_200_OK)
 async def refresh(
     refresh_token_schema: RefreshTokenRequest,
+    bgt: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Refreshes user token"""
@@ -341,9 +356,8 @@ async def refresh(
     )
 
     # perform other logic such as setting cookies
-    # loging the event in audit logs
 
-    return JsonResponseDict(
+    response = JsonResponseDict(
         message="Token refreshed",
         status="success",
         status_code=status.HTTP_200_OK,
@@ -352,6 +366,33 @@ async def refresh(
             "refresh": new_refresh_token,
         },
     )
+
+    # user info
+    user = user_service.get_user_object_using_refresh_token(
+        refresh_token=refresh_token_schema.refresh_token, db=db
+    )
+    # user device info
+    device_info = await get_device_info(request)
+    if device_info:
+        devices_service.create_with_bgt(
+            db=db, owner=user, device_info=device_info, bgt=bgt
+        )
+
+    # loging the event in audit logs
+    audit_log_service.log(
+        db=db,
+        background_task=bgt,
+        schema=AuditLogCreate(
+            user_id=user.id,
+            event=AuditLogEventEnum.LOGIN,
+            description="user refreshed their auth tokens",
+            status=AuditLogStatuses.SUCCESS,
+            ip_address=device_info.get("ip_address"),
+            user_agent=device_info.get("user_agent"),
+        ),
+    )
+
+    return response
 
 
 # PASSWORD RELATED ENDPOINTS
