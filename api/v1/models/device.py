@@ -11,6 +11,7 @@ from sqlalchemy import (
     Boolean,
 )
 from api.v1.models.base_model import BaseModel
+from sqlalchemy.orm import Session
 
 
 class Device(BaseModel):
@@ -63,3 +64,8 @@ class Device(BaseModel):
             )
 
         return info
+
+    def save(self, db: Session):
+        """save changes made to device object"""
+        db.add(self)
+        db.commit()
