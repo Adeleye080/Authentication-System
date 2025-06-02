@@ -4,11 +4,13 @@ from authlib.integrations.starlette_client import OAuth  # type: ignore
 from starlette.requests import Request
 import logging
 from api.utils.settings import settings
+from api.utils.user_device_agent import get_device_info
 from api.v1.services import (
     oauth2_service,
     user_service,
     audit_log_service,
     notification_service,
+    devices_service,
 )
 from api.v1.models.user import User
 from api.v1.schemas.audit_logs import (
@@ -123,6 +125,10 @@ async def authorize(
 
     # update login source and last login time
     user.save(db=db)
+
+    # save user device
+    device_info = get_device_info(request)
+    devices_service.create_with_bgt(db=db, device_info=device_info, owner=user, bgt=bgt)
 
     # construct redirect url
     # add access and refresh tokens to the redirect uri if cookies are not allowed
