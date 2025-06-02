@@ -263,13 +263,22 @@ def upgrade():
         "auth_country_blacklist_history",
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("country_code", sa.String(2), nullable=False),
+        sa.Column("country_name", sa.String(128), nullable=False),
         sa.Column("action", sa.String(20), nullable=False),
         sa.Column("reason", sa.String(256), nullable=True),
+        sa.Column("changed_by", sa.String(128), nullable=True),
         sa.Column(
             "created_at", sa.DateTime, nullable=True, server_default=sa.func.now()
         ),
         sa.Column(
             "updated_at",
+            sa.DateTime,
+            nullable=True,
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
+        sa.Column(
+            "timestamp",
             sa.DateTime,
             nullable=True,
             server_default=sa.func.now(),
