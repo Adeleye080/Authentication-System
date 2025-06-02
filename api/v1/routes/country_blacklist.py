@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from api.v1.schemas.country_blacklist import CountryBlacklistRequest, CountryBlacklistResponse  # type: ignore
-from api.v1.services import user_service
+from api.v1.services import user_service, country_blacklist_service
 from api.v1.models.user import User
 from db.database import get_db
+from api.utils.json_response import JsonResponseDict
 
 
 country_blacklist_router = APIRouter(tags=["Country Blacklisting"], prefix="/blacklist")
@@ -17,11 +18,9 @@ def get_all_blacklisted_countries(
     db: Session = Depends(get_db),
 ):
     """Get all blacklisted countries."""
-    blacklisted_countries = user_service.get_all_blacklisted_countries(db)
-    if not blacklisted_countries:
-        raise HTTPException(status_code=404, detail="No blacklisted countries found")
 
-    return blacklisted_countries
+    blacklisted_countries = country_blacklist_service.fetch_all(db)
+    return [country.to_dict() for country in blacklisted_countries]
 
 
 @country_blacklist_router.post(
@@ -31,25 +30,24 @@ def get_all_blacklisted_countries(
 )
 def blacklist_a_country(
     data: CountryBlacklistRequest,
+    db: Session = Depends(get_db),
     superadmin: User = Depends(user_service.get_current_superadmin),
 ):
-    """ """
-    return {
-        "country": "US",
-        "message": "Country blacklisted successfully",
-    }
+    """GeoIP blacklist a country, blocking all access request from that region"""
 
+    try:
+        c_name, c_code = country_blacklist_service.add_country_to_blacklist(
+            db=db, country_code=data.country_code, reason=data.reason, admin=superadmin
+        )
+    except HTTPException as exc:
+        return JsonResponseDict(
+            message=exc.detail, status_code=exc.status_code, status="failed"
+        )
 
-@country_blacklist_router.post(
-    "/blacklist-country",
-    status_code=status.HTTP_201_CREATED,
-)
-def blacklist_group_of_countries(
-    # data: CountryBlacklistRequest,
-    superadmin: User = Depends(user_service.get_current_superadmin),
-):
-    """ """
-    pass
+    return JsonResponseDict(
+        message=f"{c_name} ({c_code}) successfully added to blacklist.",
+        status_code=status.HTTP_201_CREATED,
+    )
 
 
 @country_blacklist_router.delete(
