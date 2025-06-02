@@ -28,7 +28,7 @@ class CountryBlacklistHistory(BaseModel):
     country_code = Column(String(2), unique=False, nullable=False)
     country_name = Column(String(128), nullable=False)
     reason = Column(String(256), nullable=True)
-    action = Column(String(64), nullable=False)  # e.g., "added", "removed", "updated"
+    action = Column(String(20), nullable=False)  # e.g., "added", "removed", "updated"
     # User or system making the change
     changed_by = Column(String(128), nullable=True)
     timestamp = Column(
