@@ -9,7 +9,7 @@ from api.utils.user_device_agent import generate_device_fingerprint
 from api.v1.models.device import Device
 from api.v1.models.user import User
 from typing import Dict
-from datetime import datetime as dt
+from datetime import datetime as dt, timezone
 
 
 class DevicesService:
@@ -143,8 +143,8 @@ class DevicesService:
             )
 
         if existing_device:
-            existing_device.last_used = dt.datetime.now(dt.timezone.utc)
-            existing_device.save()
+            existing_device.last_used = dt.now(timezone.utc)
+            existing_device.save(db=db)
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown Device"
