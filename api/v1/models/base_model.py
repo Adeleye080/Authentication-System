@@ -41,25 +41,42 @@ class BaseModel(Base):
 
     @classmethod
     def get_all(cls):
+        """
+        returns all instance of the class in the db
+        """
         from db.database import get_db
 
         db = Depends(get_db)
-        """ returns all instance of the class in the db
-        """
         return db.query(cls).all()
 
     @classmethod
     def get_by_id(cls, id: str):
-        from db.database import get_db
-
-        """ returns a single object from the db
         """
+        returns a single object from the db
+        """
+        from db.database import get_db
 
         try:
             db_generator = get_db()
             db = next(db_generator)
             obj = db.query(cls).filter_by(id=id).first()
         finally:
-            db.close()
+            db_generator.close()
+
+        return obj
+
+    @classmethod
+    def get_by_email(cls, email: str):
+        """
+        returns a single object from the db
+        """
+        from db.database import get_db
+
+        try:
+            db_generator = get_db()
+            db = next(db_generator)
+            obj = db.query(cls).filter_by(email=email).first()
+        finally:
+            db_generator.close()
 
         return obj
