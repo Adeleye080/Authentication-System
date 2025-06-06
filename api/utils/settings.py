@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     APP_URL: str = config("APP_URL", default="fastapi-authsystem.example.com")
 
     FRONTEND_HOME_URL: str = config("FRONTEND_HOME_URL")
+    FRONTEND_DASHBOARD_URL: str = config(
+        "FRONTEND_DASHBOARD_URL", cast=str, default=None
+    )  # Optional
     FRONTEND_EMAIL_VERIFICATION_URL: str = config(
         "FRONTEND_EMAIL_VERIFICATION_URL",
         default=f"{FRONTEND_HOME_URL.strip('/')}/auth/verify-email",
