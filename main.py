@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from api.v1.routes import api_version_one
+from api.v1.models.mmdb import MMDB_TRACKER
 from api.v1.schemas.main import ProbeServerResponse, HomeResponse
 from api.core.logging.logging_config import setup_logging
 from fastapi.templating import Jinja2Templates
@@ -19,9 +20,13 @@ from starlette.middleware.sessions import SessionMiddleware
 async def lifespan(app: FastAPI):
     """Lifespan function"""
 
-    # startup events
+    # STARTUP EVENTS
+    # setup application level log
     setup_logging()
+    # setup and register schedulers
     scheduler.start()
+    # Initiate GeoIP tracker
+    MMDB_TRACKER()
 
     yield
 
