@@ -146,9 +146,9 @@ def upgrade():
     # CREATE AUDIT LOGS TABLE
     op.create_table(
         "auth_audit_logs",
-        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("id", sa.Integer, autoincrement=True, primary_key=True),
         sa.Column("user_id", sa.String(36), nullable=False),
-        sa.Column("event", audit_log_event_enum, nullable=False),
+        sa.Column("event", sa.String(100), nullable=False),
         sa.Column("status", sa.String(50), nullable=False),
         sa.Column("description", sa.Text, nullable=False),
         sa.Column(
@@ -242,6 +242,7 @@ def upgrade():
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("country_code", sa.String(2), nullable=False),
         sa.Column("country_name", sa.String(128), nullable=False),
+        sa.Column("reason", sa.String(256), nullable=False),
         sa.Column(
             "created_at", sa.DateTime, nullable=True, server_default=sa.func.now()
         ),
@@ -297,7 +298,7 @@ def upgrade():
             nullable=False,
         ),
         sa.Column("secret", sa.LargeBinary(128), nullable=False),
-        sa.Column("confirmed", sa.Boolean(), nullable=False, default=False, index=True),
+        sa.Column("confirmed", sa.Boolean(), nullable=False, default=False),
         sa.Column("name", sa.String(100), nullable=True),
         sa.Column("last_used", sa.DateTime, nullable=True, index=True),
         sa.Column(
