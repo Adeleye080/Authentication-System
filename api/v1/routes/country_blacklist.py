@@ -51,7 +51,7 @@ def blacklist_a_country(
 
 
 @country_blacklist_router.delete(
-    "/unlist-country/{country_code}", status_code=status.HTTP_200_OK
+    "/blacklist-country/{country_code}", status_code=status.HTTP_200_OK
 )
 def unlist_a_country_from_blacklist(
     country_code: str,
@@ -61,7 +61,9 @@ def unlist_a_country_from_blacklist(
     pass
 
 
-@country_blacklist_router.delete("/unlist-countries", status_code=status.HTTP_200_OK)
+@country_blacklist_router.delete(
+    "/blacklist-countries/bulk", status_code=status.HTTP_200_OK
+)
 def unlist_group_of_countries_from_blacklist(
     country_codes: list[str],
     superadmin: User = Depends(user_service.get_current_superadmin),
