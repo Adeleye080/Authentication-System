@@ -42,7 +42,7 @@ class UserService(Service):
 
         if db.query(User).filter(User.email == schema.email).first():
             raise HTTPException(
-                status_code=400,
+                status_code=409,
                 detail="User with this email already exists",
             )
 
