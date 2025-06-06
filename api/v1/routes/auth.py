@@ -63,7 +63,7 @@ async def login(
     data: UserLogin,
     bgt: BackgroundTasks,
     db: Session = Depends(get_db),
-    validate_request_country_in_blacklist=Depends(
+    validate_request_country_in_blacklist: None = Depends(
         geoip_service.blacklisted_country_dependency_check
     ),
 ):
@@ -205,6 +205,9 @@ async def request_magic_link_login(
     bgt: BackgroundTasks,
     email: MagicLinkRequest,
     db: Session = Depends(get_db),
+    validate_request_country_in_blacklist: None = Depends(
+        geoip_service.blacklisted_country_dependency_check
+    ),
 ):
     """Send magic link to user"""
 
@@ -245,6 +248,9 @@ async def magic_link_login(
     bgt: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
+    validate_request_country_in_blacklist: None = Depends(
+        geoip_service.blacklisted_country_dependency_check
+    ),
 ):
     """verifies magic link token and logs user in"""
 
@@ -348,6 +354,9 @@ async def refresh(
     bgt: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
+    validate_request_country_in_blacklist: None = Depends(
+        geoip_service.blacklisted_country_dependency_check
+    ),
 ):
     """Refreshes user token"""
 
@@ -402,7 +411,9 @@ async def refresh(
     status_code=status.HTTP_200_OK,
 )
 async def forgot_password(
-    email: EmailStr, bgt: BackgroundTasks, db: Session = Depends(get_db)
+    email: EmailStr,
+    bgt: BackgroundTasks,
+    db: Session = Depends(get_db),
 ):
     """Request password reset"""
 
@@ -426,6 +437,9 @@ async def reset_password(
     token: str = Query(..., description="Password reset token"),
     data: PasswordResetRequest = Body(..., description="New Password"),
     db: Session = Depends(get_db),
+    validate_request_country_in_blacklist: None = Depends(
+        geoip_service.blacklisted_country_dependency_check
+    ),
 ):
     """Reset user password"""
 
