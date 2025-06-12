@@ -2,7 +2,7 @@
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, status, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from api.v1.routes import api_version_one
@@ -65,8 +65,16 @@ app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 email_templates = Jinja2Templates(directory="smtp/templates/html_mail_templates")
 
 
+@app.get("/", include_in_schema=False, status_code=status.HTTP_200_OK)
+def root(request: Request):
+    return RedirectResponse(url=request.url_for("home"))
+
+
 @app.get(
-    "/", tags=["Home"], status_code=status.HTTP_200_OK, response_model=HomeResponse
+    "/auth/system/home",
+    tags=["Home"],
+    status_code=status.HTTP_200_OK,
+    response_model=HomeResponse,
 )
 async def home():
     """
@@ -82,13 +90,15 @@ async def home():
                 "website": "https://ajiboye-pius.vercel.app",
                 "github": "https://github.com/Adeleye080",
             },
+            "contributors": [],
             "URL": "site_url",
+            "documentation": "docs_url",
         },
     }
 
 
 @app.get(
-    "/probe",
+    "/auth/system/probe",
     tags=["Home"],
     status_code=status.HTTP_200_OK,
     response_model=ProbeServerResponse,
@@ -145,7 +155,6 @@ async def new_oauth2_signup():
     to the webhook URL that you register with our system.
 
     **Security Requirements:**
-    - Your server must allow incoming POST requests from this server's IP.
     - If you use a firewall or IP allowlist, add this server's IP to the allowed list.
     - If your webhook endpoint is browser-based, ensure your CORS policy allows requests from this domain.
     """
