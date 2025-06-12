@@ -112,7 +112,7 @@ async def create_new_auth_user(
 )
 async def get_auth_users(
     page: int = 1,
-    per_page: int = 10,
+    per_page: int = 50,
     active: bool = True,
     verified: bool = True,
     deleted: bool = False,
