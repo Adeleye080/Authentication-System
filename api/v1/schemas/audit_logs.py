@@ -1,6 +1,7 @@
-from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Optional, Dict, Any, Union, List
+from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from enum import Enum as PyEnum
+from datetime import datetime
 
 
 class AuditLogSchema(BaseModel):
@@ -63,3 +64,44 @@ class AuditLogStatuses(str, PyEnum):
     FAILED = "FAILED"
     SUCCESS = "SUCCESS"
     IN_BETWEEN = "SUCCESS BUT ERROR OCCURRED"
+
+
+class HyperMedia(BaseModel):
+    """Hypermedia infos"""
+
+    current_page: int
+    per_page: int
+    total_pages: int
+    total: int
+    count: int
+    links: dict[str, str] = {"prev_page": "/?page=1", "next_page": "?page=3"}
+
+
+class LogData(BaseModel):
+    """
+    Schema for users to be returned to superadmin
+    """
+
+    id: int
+    user_id: str
+    event: str
+    status: str
+    description: str
+    timestamp: datetime
+    details: dict
+    ip_address: str
+    user_agent: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AllLogsResponse(BaseModel):
+    """
+    Schema for all users
+    """
+
+    message: str
+    status_code: int
+    status: str = "success"
+    data: Union[List[LogData]]
+    pagination: HyperMedia
