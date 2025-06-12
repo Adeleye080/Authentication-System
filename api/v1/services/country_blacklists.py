@@ -60,9 +60,10 @@ class CountryBlacklistService:
         return country_name, country_code
 
     def remove_country_from_blacklist(
-        self, db: Session, country_code: str, admin: User
-    ):
-        """Remove country from blacklist. save the blacklist history."""
+        self, db: Session, country_code: str, reason: str, admin: User
+    ) -> Tuple[str, str]:
+        """Remove a country from blacklist. save the blacklist history.\n
+        Return (Country_name, country_code)"""
 
         blacklisted_country = (
             db.query(CountryBlacklist)
@@ -70,9 +71,9 @@ class CountryBlacklistService:
             .first()
         )
         if blacklisted_country:
-            c_history = CountryBlacklist(
+            c_history = CountryBlacklistHistory(
                 country_code=country_code,
-                reason=blacklisted_country.reason,
+                reason=reason,
                 country_name=blacklisted_country.country_name,
                 action="Removed",
                 changed_by=f"superadmin ({admin.email})",
@@ -80,8 +81,13 @@ class CountryBlacklistService:
             db.delete(blacklisted_country)
             db.add(c_history)
             db.commit()
+            return blacklisted_country.country_name, blacklisted_country.country_code
         else:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Country not found in blacklist",
+                detail="Country not in blacklist",
             )
+
+    def remove_countries_from_blacklist():
+        """ """
+        pass
