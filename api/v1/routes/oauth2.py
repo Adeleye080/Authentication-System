@@ -19,6 +19,7 @@ from api.v1.schemas.audit_logs import (
     AuditLogStatuses,
 )
 from api.v1.schemas.user import LoginSource
+from api.v1.services import geoip_service
 from sqlalchemy.orm import Session
 from db.database import get_db
 import random
@@ -31,8 +32,14 @@ logger = logging.getLogger(__name__)
 oauth2_router = APIRouter(prefix="/oauth2", tags=["OAuth2"])
 
 
-@oauth2_router.post("/login/{provider}")
-async def login(request: Request, provider: str):
+@oauth2_router.get("/login/{provider}")
+async def login(
+    request: Request,
+    provider: str,
+    validate_request_country_in_blacklist: None = Depends(
+        geoip_service.blacklisted_country_dependency_check
+    ),
+):
     """Login route for OAuth2 providers"""
 
     if provider not in oauth2_service.secureOAuth()._registry:
