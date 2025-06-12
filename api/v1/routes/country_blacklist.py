@@ -53,12 +53,21 @@ def blacklist_a_country(
 @country_blacklist_router.delete(
     "/blacklist-country/{country_code}", status_code=status.HTTP_200_OK
 )
-def unlist_a_country_from_blacklist(
-    country_code: str,
+def remove_a_country_from_blacklist(
+    data: CountryBlacklistRequest,
+    db: Session = Depends(get_db),
     superadmin: User = Depends(user_service.get_current_superadmin),
 ):
-    """ """
-    pass
+    """Remove a country from blacklist"""
+
+    c_name, c_code = country_blacklist_service.remove_country_from_blacklist(
+        db=db, country_code=data.country_code, reason=data.reason, admin=superadmin
+    )
+
+    return JsonResponseDict(
+        message=f"{c_name} ({c_code}) successfully removed to blacklist.",
+        status_code=status.HTTP_200_OK,
+    )
 
 
 @country_blacklist_router.delete(
@@ -67,6 +76,14 @@ def unlist_a_country_from_blacklist(
 def unlist_group_of_countries_from_blacklist(
     country_codes: list[str],
     superadmin: User = Depends(user_service.get_current_superadmin),
+):
+    """ """
+    pass
+
+
+@country_blacklist_router.get("/history", status_code=status.HTTP_200_OK)
+def get_blacklist_history(
+    country_code: str, superadmin: User = Depends(user_service.get_current_superadmin)
 ):
     """ """
     pass
