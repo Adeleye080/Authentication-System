@@ -340,6 +340,21 @@ def upgrade():
         sa.Index("ix_auth_user_attributes_id", "id"),
     )
 
+    op.create_table(
+        "auth_sms_otp_codes",
+        sa.Column(
+            "id", sa.Integer(), primary_key=True, autoincrement=True, nullable=False
+        ),
+        sa.Column("user_id", sa.String(length=36), nullable=False),
+        sa.Column("code_hash", sa.String(length=64), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.ForeignKeyConstraint(["user_id"], ["auth_users.id"], ondelete="CASCADE"),
+        sa.Index("ix_sms_otp_codes_user_id", "user_id"),
+        sa.Index("ix_sms_otp_codes_code_hash", "code_hash"),
+    )
+
 
 def downgrade():
     """
