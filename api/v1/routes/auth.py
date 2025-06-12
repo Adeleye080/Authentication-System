@@ -27,6 +27,7 @@ from api.v1.schemas.user import (
     EmailStr,
     PasswordChangeRequest,
     PasswordResetRequest,
+    ForgotPasswordRequest,
     MagicLinkToken,
     MagicLinkRequest,
 )
@@ -51,7 +52,7 @@ from api.v1.services import (
 
 
 auth_router = APIRouter(tags=["Auth"])
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/swagger-login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/api/v1/swagger-login")
 logger = logging.getLogger(__name__)
 
 
@@ -297,7 +298,6 @@ async def magic_link_login(
         )
 
         # loging the event in audit logs
-        device_info = await get_device_info(request)
         audit_log_service.log(
             db=db,
             schema=AuditLogCreate(
@@ -411,13 +411,13 @@ async def refresh(
     status_code=status.HTTP_200_OK,
 )
 async def forgot_password(
-    email: EmailStr,
+    data: ForgotPasswordRequest,
     bgt: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     """Request password reset"""
 
-    user = user_service.fetch(db=db, email=email)
+    user = user_service.fetch(db=db, email=data.email)
 
     if user:
         notification_service.send_password_reset_mail(user=user, bgt=bgt)
@@ -434,6 +434,8 @@ async def forgot_password(
     status_code=status.HTTP_200_OK,
 )
 async def reset_password(
+    request: Request,
+    bgt: BackgroundTasks,
     token: str = Query(..., description="Password reset token"),
     data: PasswordResetRequest = Body(..., description="New Password"),
     db: Session = Depends(get_db),
@@ -463,8 +465,22 @@ async def reset_password(
     )
 
     # send notification to user
+    notification_service.send_success_password_reset_or_changed_mail(user=user, bgt=bgt)
 
     # loging the event in audit logs
+    device_info = await get_device_info(request)
+    audit_log_service.log(
+        db=db,
+        background_task=bgt,
+        schema=AuditLogCreate(
+            user_id=user.id,
+            event=AuditLogEventEnum.RESET_PASSWORD,
+            description="User reset their account password",
+            status=AuditLogStatuses.SUCCESS,
+            ip_address=device_info.get("ip_address", "N/A"),
+            user_agent=device_info.get("user_agent", "N/A"),
+        ),
+    )
 
     return JsonResponseDict(
         message="Password reset successful",
@@ -483,6 +499,8 @@ async def reset_password(
 )
 async def change_password(
     data: PasswordChangeRequest,
+    bgt: BackgroundTasks,
+    request: Request,
     user: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -500,9 +518,23 @@ async def change_password(
         new_password=data.new_password, old_password=data.old_password, user=user, db=db
     )
 
-    # notify user of password change
+    # send notification to user
+    notification_service.send_success_password_reset_or_changed_mail(user=user, bgt=bgt)
 
     # loging the event in audit logs
+    device_info = await get_device_info(request)
+    audit_log_service.log(
+        db=db,
+        background_task=bgt,
+        schema=AuditLogCreate(
+            user_id=user.id,
+            event=AuditLogEventEnum.CHANGED_PASSWORD,
+            description="User changed their account password",
+            status=AuditLogStatuses.SUCCESS,
+            ip_address=device_info.get("ip_address", "N/A"),
+            user_agent=device_info.get("user_agent", "N/A"),
+        ),
+    )
 
     return JsonResponseDict(
         message="Password changed successfully",
