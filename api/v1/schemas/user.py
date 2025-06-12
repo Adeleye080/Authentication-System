@@ -9,7 +9,7 @@ from pydantic import (
 from datetime import datetime
 from typing import Annotated, List, Union, Optional
 import re
-import dns.resolver
+import dns.resolver  # type: ignore
 from email_validator import validate_email, EmailNotValidError  # type: ignore
 from enum import Enum as PyEnum
 
@@ -101,6 +101,41 @@ class PasswordResetRequest(BaseModel):
 
         if password_str != confirm_password_str:
             raise ValueError("Passwords do not match")
+
+        return values
+
+
+class ForgotPasswordRequest(BaseModel):
+
+    email: EmailStr = Field(
+        ...,
+        description="Current valid user emaill address",
+        # example="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_email(cls, values: dict):
+        """
+        Validates email.
+        """
+        email = values.get("email")
+
+        # Validate email
+        try:
+            email_info = validate_email(email, check_deliverability=True)
+            domain = email_info.domain
+
+            if domain.count(".com") > 1:
+                raise ValueError("Email address contains multiple '.com' endings.")
+
+            if not validate_mx_record(domain):
+                raise ValueError("Email is invalid")
+
+        except EmailNotValidError as exc:
+            raise ValueError(f"Invalid email: {exc}") from exc
+        except Exception as exc:
+            raise ValueError(f"Email validation error: {exc}") from exc
 
         return values
 
