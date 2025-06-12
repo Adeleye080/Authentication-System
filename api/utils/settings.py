@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     AUTH_SECURE_COOKIES: bool = config("SECURE_COOKIES", cast=bool, default=True)
     AUTH_SAME_SITE: str = config("SAME_SITE", cast=str, default="strict")
 
+    ALLOW_SMS_AUTH: bool = config("ALLOW_SMS_AUTH", default=False, cast=bool)
+    USER_SERVICE_PHONE_NUMBER_URL: str = config(
+        "USER_SERVICE_PHONE_NUMBER_URL", cast=str, default="0"
+    )
+
     # DATABASE CONFIG
     DB_HOST: str = config("DB_HOST")
     DB_PORT: int = config("DB_PORT", cast=int)
@@ -82,7 +87,7 @@ class Settings(BaseSettings):
 
     FRONTEND_HOME_URL: str = config("FRONTEND_HOME_URL")
     FRONTEND_DASHBOARD_URL: str = config(
-        "FRONTEND_DASHBOARD_URL", cast=str, default=None
+        "FRONTEND_DASHBOARD_URL", cast=str, default=""
     )  # Optional
     FRONTEND_EMAIL_VERIFICATION_URL: str = config(
         "FRONTEND_EMAIL_VERIFICATION_URL",
