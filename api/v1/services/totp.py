@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from api.v1.models.sms_otp import SMSOtpCodes
 from api.utils.settings import settings
 from fastapi import HTTPException, status
 from api.v1.models.totp_device import TOTPDevice
@@ -10,6 +11,7 @@ from typing import Tuple
 from sqlalchemy.exc import SQLAlchemyError
 from pydantic import EmailStr
 from datetime import datetime, timezone
+import hashlib
 
 
 class TOTPService:
@@ -244,3 +246,42 @@ class TOTPService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error disabling TOTP device: {str(e)}",
             )
+
+    def generate_sms_otp_code(self, db: Session, user_id) -> str:
+        """Generate 6-digit sms otp code"""
+
+        import random
+
+        otp_code = f"{random.randint(0, 999999):06d}"
+
+        existing_otps = (
+            db.query(SMSOtpCodes).filter(SMSOtpCodes.user_id == user_id).delete()
+        )
+
+        otp = SMSOtpCodes.create(user_id=user_id, code=otp_code)
+        db.add(otp)
+        db.commit()
+        return otp_code
+
+    def verify_sms_otp_code(self, db: Session, code: str, user_id: str) -> None:
+        """
+        Verify SMS OTP code.
+        Deletes the OTP from the database after verification.
+        """
+
+        exception = HTTPException(status_code=400, detail="Wrong OTP provided.")
+
+        stored_otp = (
+            db.query(SMSOtpCodes).filter(SMSOtpCodes.user_id == user_id).first()
+        )
+        if not stored_otp:
+            raise exception
+
+        expected_hash = hashlib.sha256(f"{code}:{user_id}".encode()).hexdigest()
+        if stored_otp.code_hash == expected_hash:
+            pass
+        else:
+            raise exception
+
+        db.delete(stored_otp)
+        db.commit()
