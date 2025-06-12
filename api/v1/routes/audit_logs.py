@@ -1,7 +1,9 @@
-from fastapi import APIRouter, status, Depends, HTTPException
+from fastapi import APIRouter, status, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from typing import Optional
+from datetime import datetime
+from api.v1.schemas.audit_logs import AuditLogEventEnum
 from db.database import get_db
-from api.v1.schemas.audit_logs import AuditLogSchema
 from api.v1.services import user_service, audit_log_service
 from api.v1.models.user import User
 
@@ -15,11 +17,16 @@ audit_log_router = APIRouter(prefix="/logs", tags=["Audit Logs"])
     status_code=status.HTTP_200_OK,
 )
 def fetch_all_audit_logs(
+    event: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    start_time: Optional[datetime] = Query(None),
+    end_time: Optional[datetime] = Query(None),
     db: Session = Depends(get_db),
     moderator_superadmin: User = Depends(user_service.get_current_user),
 ):
     """Fetches all audit logs"""
-    # endpoint maybe removed as there are rare case where all logs will be needed
+
+    audit_log_service.get
     pass
 
 
@@ -54,6 +61,8 @@ def fetch_user_audit_logs(
     moderator_superadmin: User = Depends(user_service.get_current_user),
 ):
     """Fetches all audit logs for a user"""
+
+    # add option to get by status, events, etc.
 
     # admin only route
     if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
