@@ -32,7 +32,7 @@ def get_user_devices_by_user_id(
     moderator_superadmin: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """ """
+    """Get all devices belonging to a user"""
 
     if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
         raise HTTPException(
