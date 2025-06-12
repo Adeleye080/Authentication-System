@@ -29,7 +29,7 @@ from api.utils.encrypters_and_decrypters import base64, cipher_suite
 import logging
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/swagger-login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/api/v1/swagger-login")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 logger = logging.getLogger(__name__)
 
@@ -119,9 +119,9 @@ class UserService(Service):
         db: Session,
         page: int,
         per_page: int,
-        is_active: Optional[bool] = True,
-        is_deleted: Optional[bool] = False,
-        is_verified: Optional[bool] = True,
+        is_active: bool = True,
+        is_deleted: bool = False,
+        is_verified: bool = True,
     ) -> Tuple[List[User], int]:
         """
         Fetch all auth users in the system with optional filters.
@@ -129,9 +129,9 @@ class UserService(Service):
         Args:
             :param page: int: page number
             :param per_page: int: number of items per page
-            :param is_active: Optional[bool]: Filter users based on active status
-            :param is_deleted: Optional[bool]: Filter users based on deletion status
-            :param is_verified: Optional[bool]: Filter users based on verification status
+            :param is_active: bool: Filter users based on active status
+            :param is_deleted: bool: Filter users based on deletion status
+            :param is_verified: bool: Filter users based on verification status
 
         Returns:
             :return: Tuple[List[User], int]: Tuple of users and total number of users matching filters
@@ -139,32 +139,29 @@ class UserService(Service):
         # Calculate the offset for pagination
         offset = (page - 1) * per_page
 
-        # Base query
-        query = db.query(User)
-
-        # Apply optional filters
-        if is_active is not None:
-            query = query.filter(User.is_active == is_active)
-        if is_deleted is not None:
-            query = query.filter(User.is_deleted == is_deleted)
-        if is_verified is not None:
-            query = query.filter(User.is_verified == is_verified)
-
-        # Get paginated users
-        users = query.offset(offset).limit(per_page).all()
+        # Make query
+        users = (
+            db.query(User)
+            .filter(
+                *(
+                    User.is_active == is_active,
+                    User.is_deleted == is_deleted,
+                    User.is_verified == is_verified,
+                )
+            )
+            .offset(offset)
+            .limit(per_page)
+            .all()
+        )
 
         # Get the total number of filtered users
         total = (
             db.query(func.count(User.id))
             .filter(
                 *(
-                    User.is_active == is_active if is_active is not None else True,
-                    User.is_deleted == is_deleted if is_deleted is not None else False,
-                    (
-                        User.is_verified == is_verified
-                        if is_verified is not None
-                        else True
-                    ),
+                    User.is_active == is_active,
+                    User.is_deleted == is_deleted,
+                    User.is_verified == is_verified,
                 )
             )
             .scalar()
@@ -595,7 +592,7 @@ class UserService(Service):
             owner = self.fetch_by_id(db=db, id=token.id)
             self.perform_user_check(user=owner)
 
-            access = self.create_access_token(user_id=token.id)
+            access = self.create_access_token(db=db, user_obj=owner)
             refresh = self.create_refresh_token(db=db, user_id=token.id)
 
             return (access, refresh)
@@ -747,8 +744,8 @@ class UserService(Service):
         user.is_active = False
 
         # Create reactivation token
-        token = self.create_access_token(user_id=user.id)
-        reactivation_link = f"https://{request.url.hostname}/api/v1/users/accounts/reactivate?token={token}"
+        token = self.create_access_token(db=db, user_obj=user)
+        reactivation_link = f"https://{settings.FRONTEND_HOME_URL.strip('/')}/accounts/reactivate?token={token}"
 
         db.commit()
 
@@ -832,7 +829,7 @@ class UserService(Service):
         self._batch_delete_refresh_tokens(db=db, user_id=user.id)
 
         # create new credentials
-        new_access_token = self.create_access_token(user_id=user.id)
+        new_access_token = self.create_access_token(db=db, user_obj=user)
         new_refresh_token = self.create_refresh_token(db=db, user_id=user.id)
 
         return (
