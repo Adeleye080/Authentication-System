@@ -4,6 +4,7 @@ from smtp.mailing import send_mail
 from fastapi import BackgroundTasks
 from api.v1.models.user import User
 from api.utils.settings import settings
+from api.utils.twilo_sms import send_sms_message
 from api.utils.encrypters_and_decrypters import (
     generate_magic_link_token,
     generate_user_verification_token,
@@ -45,7 +46,6 @@ class Notification:
                 "verificationLink": verification_link,
             },
         )
-        print("verification link: ", verification_link)
 
     def send_magic_link_mail(self, user: User, bgt: BackgroundTasks) -> None:
         """Send magic link to user to login without entering password"""
@@ -101,6 +101,70 @@ class Notification:
             template_name="welcome_template.html",
             template_context={
                 "username": user.email,
-                "dashboardLink": settings.FRONTEND_HOME_URL.strip("/"),
+                "dashboardLink": settings.FRONTEND_DASHBOARD_URL.strip("/")
+                or settings.FRONTEND_HOME_URL.strip("/"),
             },
+        )
+
+    def send_success_password_reset_or_changed_mail(
+        self, user: User, bgt: BackgroundTasks
+    ) -> None:
+        """Notify user of successful password change/reset."""
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Your Password has Changed",
+            template_name="success_password_reset.html",
+            template_context={
+                "username": user.email,
+                "loginLink": settings.FRONTEND_DASHBOARD_URL.strip("/")
+                or settings.FRONTEND_HOME_URL.strip("/"),
+            },
+        )
+
+    def send_2fa_setup_success_mail(self, user: User, bgt: BackgroundTasks) -> None:
+        """
+        Send mail to notify user of successful 2FA setup
+
+        :param user: User Object
+        :param bgt: fastapi background task obj
+        """
+
+        template_context = {
+            "dashboardLink": settings.FRONTEND_DASHBOARD_URL.strip("/")
+            or settings.FRONTEND_HOME_URL.strip("/"),
+            "username": user.email,
+        }
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Security Update: 2FA Enabled on Your Account",
+            template_name="success_2fa_setup.html",
+            template_context=template_context,
+        )
+
+    def totp_2fa_disabled_mail(self, user: User, bgt: BackgroundTasks) -> None:
+        """Inform user that 2FA is disabled"""
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Security Alert: 2FA Disabled",
+            template_name="disabled_2fa.html",
+            template_context={
+                "username": user.email,
+                "dashboardLink": settings.FRONTEND_DASHBOARD_URL.strip("/")
+                or settings.FRONTEND_HOME_URL.strip("/"),
+            },
+        )
+
+    def send_sms_otp(self, number: str, otp_code: int, bgt: BackgroundTasks) -> None:
+        """Send OTP to user via SMS"""
+
+        bgt.add_task(
+            func=send_sms_message,
+            phone_number=number,
+            message=f"Your OTP code is {otp_code}\n\nPlease do not share this code with anyone.",
         )
