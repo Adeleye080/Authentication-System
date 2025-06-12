@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 oauth2_router = APIRouter(prefix="/oauth2", tags=["OAuth2"])
 
 
-@oauth2_router.get("/login/{provider}")
+@oauth2_router.post("/login/{provider}")
 async def login(
     request: Request,
     provider: str,
