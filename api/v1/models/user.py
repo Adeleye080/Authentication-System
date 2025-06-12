@@ -94,7 +94,7 @@ class User(BaseModel):
     ) -> Tuple[bool, dict]:
         """
         Check if user exists in the database with the given email or ID.
-        If all are given, it will check for the first one that is found.
+        If both are given, it will check for the first one that is found.
 
         :param db: Database session
         :param email: User email
