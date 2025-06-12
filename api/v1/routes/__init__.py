@@ -8,7 +8,7 @@ from api.v1.routes.country_blacklist import country_blacklist_router
 from api.v1.routes.device import user_device_router
 
 
-api_version_one = APIRouter(prefix="/api/v1/auth")
+api_version_one = APIRouter(prefix="/auth/api/v1")
 
 api_version_one.include_router(auth_router)
 api_version_one.include_router(oauth2_router)
