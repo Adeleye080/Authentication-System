@@ -51,6 +51,8 @@ class Settings(BaseSettings):
         "USER_SERVICE_PHONE_NUMBER_URL", cast=str, default="0"
     )
 
+    DEBUG_MODE: bool = config("DEBUG_MODE", cast=bool, default=False)
+
     # DATABASE CONFIG
     DB_HOST: str = config("DB_HOST")
     DB_PORT: int = config("DB_PORT", cast=int)
