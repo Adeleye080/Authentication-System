@@ -49,6 +49,7 @@ class AuditLogService:
     def fetch_logs_with_filters_and_pagination(
         self,
         db: Session,
+        user_id: Optional[str] = None,
         event: Optional[str] = None,
         status: Optional[str] = None,
         start_time: Optional[datetime] = None,
@@ -67,6 +68,8 @@ class AuditLogService:
 
         if event:
             conditions.append(AuditLog.event == event)
+        if user_id:
+            conditions.append(AuditLog.user_id == user_id)
         if status:
             conditions.append(AuditLog.status == status)
         if start_time:
@@ -135,31 +138,3 @@ class AuditLogService:
                 db_generator.close()
 
         return log
-
-    def retrieve_user_logs(
-        self, db: Session, user_id: str, page: int = 1, per_page: int = 50
-    ) -> Tuple[List[AuditLog], int]:
-        """Retrieves logs belonging to a user
-
-
-        :param page: page number
-        :param per_page: number of items per page
-
-        Returns: (logs, overall_logs_total)
-        """
-        # Calculate the offset for pagination
-        offset = (page - 1) * per_page
-
-        logs = (
-            db.query(AuditLog)
-            .filter(AuditLog.user_id == user_id)
-            .order_by(desc(AuditLog.timestamp))
-            .offset(offset)
-            .limit(per_page)
-            .all()
-        )
-
-        # Query to get the total number of logs
-        total_logs = db.query(func.count(AuditLog.id)).scalar()
-
-        return logs, total_logs
