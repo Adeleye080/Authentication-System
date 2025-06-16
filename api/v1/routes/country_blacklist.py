@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Query
 from sqlalchemy.orm import Session
 from api.v1.schemas.country_blacklist import CountryBlacklistRequest, CountryBlacklistResponse  # type: ignore
 from api.v1.services import user_service, country_blacklist_service
@@ -11,7 +11,7 @@ country_blacklist_router = APIRouter(tags=["Country Blacklisting"], prefix="/bla
 
 
 @country_blacklist_router.get(
-    "/all-listed-countries", response_model=list[CountryBlacklistResponse]
+    "/countries/get", response_model=list[CountryBlacklistResponse]
 )
 def get_all_blacklisted_countries(
     superadmin: User = Depends(user_service.get_current_superadmin),
@@ -20,11 +20,18 @@ def get_all_blacklisted_countries(
     """Get all blacklisted countries."""
 
     blacklisted_countries = country_blacklist_service.fetch_all(db)
-    return [country.to_dict() for country in blacklisted_countries]
+    data = [country.to_dict() for country in blacklisted_countries]
+
+    return JsonResponseDict(
+        message="Retrieved country blacklist",
+        status="success",
+        data=data,
+        status_code=status.HTTP_200_OK,
+    )
 
 
 @country_blacklist_router.post(
-    "/blacklist-country",
+    "/countries/add",
     status_code=status.HTTP_201_CREATED,
     response_model=CountryBlacklistResponse,
 )
@@ -45,13 +52,13 @@ def blacklist_a_country(
         )
 
     return JsonResponseDict(
-        message=f"{c_name} ({c_code}) successfully added to blacklist.",
+        message=f"{c_name} ({c_code.upper()}) successfully added to blacklist.",
         status_code=status.HTTP_201_CREATED,
     )
 
 
 @country_blacklist_router.delete(
-    "/blacklist-country/{country_code}", status_code=status.HTTP_200_OK
+    "/countries/remove/{country_code}", status_code=status.HTTP_200_OK
 )
 def remove_a_country_from_blacklist(
     data: CountryBlacklistRequest,
@@ -64,26 +71,41 @@ def remove_a_country_from_blacklist(
         db=db, country_code=data.country_code, reason=data.reason, admin=superadmin
     )
 
+    if not c_name and not c_code:
+        return JsonResponseDict(
+            message="Country was not in blacklist, no action taken",
+            status_code=status.HTTP_200_OK,
+        )
+
     return JsonResponseDict(
-        message=f"{c_name} ({c_code}) successfully removed to blacklist.",
+        message=f"{c_name} ({c_code.upper()}) successfully removed to blacklist.",
         status_code=status.HTTP_200_OK,
     )
 
 
-@country_blacklist_router.delete(
-    "/blacklist-countries/bulk", status_code=status.HTTP_200_OK
-)
-def unlist_group_of_countries_from_blacklist(
-    country_codes: list[str],
-    superadmin: User = Depends(user_service.get_current_superadmin),
-):
-    """ """
-    pass
-
-
-@country_blacklist_router.get("/history", status_code=status.HTTP_200_OK)
+@country_blacklist_router.get("/countries/history", status_code=status.HTTP_200_OK)
 def get_blacklist_history(
-    country_code: str, superadmin: User = Depends(user_service.get_current_superadmin)
+    country_code: str = Query(
+        None,
+        max_length=2,
+        min_length=2,
+        description="iso code of the country to fetch history",
+    ),
+    superadmin: User = Depends(user_service.get_current_superadmin),
+    db: Session = Depends(get_db),
 ):
-    """ """
-    pass
+    """Retrieve blacklist history"""
+
+    history = country_blacklist_service.fetch_blacklist_history(
+        db=db,
+        country_code=country_code,
+    )
+
+    data = [entry.to_dict() for entry in history]
+
+    return JsonResponseDict(
+        message="Retrieved country blacklist history",
+        status="success",
+        data=data,
+        status_code=status.HTTP_200_OK,
+    )
