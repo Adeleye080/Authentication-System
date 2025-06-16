@@ -32,10 +32,13 @@ class Settings(BaseSettings):
         cast=str,
     )
 
-    # APPLICATION SECRETS
+    # APPLICATION SPECIFIC CONFIG
     SECRET_KEY: str = config("SECRET_KEY")
     ALGORITHM: str = config("ALGORITHM")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = config("ACCESS_TOKEN_EXPIRE_MINUTES")
+    APP_SERVICE_TOKEN_EXPIRE_HOUR: int = config(
+        "APP_SERVICE_TOKEN_EXPIRE_HOUR", cast=int, default=5
+    )
     VERIFICATION_TOKEN_EXPIRATION_TIME: int = config(
         "VERIFICATION_TOKEN_EXPIRATION_TIME", cast=int, default=600
     )  # 10 minutes
