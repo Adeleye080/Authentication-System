@@ -36,9 +36,7 @@ oauth2_router = APIRouter(prefix="/oauth2", tags=["OAuth2"])
 async def login(
     request: Request,
     provider: str,
-    validate_request_country_in_blacklist: None = Depends(
-        geoip_service.blacklisted_country_dependency_check
-    ),
+    _: None = Depends(geoip_service.blacklisted_country_dependency_check),
 ):
     """Login route for OAuth2 providers"""
 
@@ -113,6 +111,24 @@ async def authorize(
         user.save(db=db)
         # send welcome email to user
         notification_service.send_welcome_mail(user=user, bgt=bgt)
+
+        # audit log
+        audit_log_service.log(
+            db=db,
+            background_task=bgt,
+            schema=AuditLogCreate(
+                user_id=user.id,
+                event=AuditLogEventEnum.CREATE_ACCOUNT,
+                status=AuditLogStatuses.SUCCESS,
+                ip_address="Not Available",
+                details={
+                    "provider": provider,
+                    "user_info": user_info,
+                },
+                user_agent="Not Available",
+                description=f"Account creation: created account for {user.email} via {provider} OAuth",
+            ),
+        )
 
         # send new user info to webhook url in the background
         oauth2_service.post_oauth_signup_webhook(bgt, user_info)
