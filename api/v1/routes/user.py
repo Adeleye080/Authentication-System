@@ -48,9 +48,7 @@ async def create_new_auth_user(
     data: UserCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    validate_request_country_in_blacklist: None = Depends(
-        geoip_service.blacklisted_country_dependency_check
-    ),
+    _: None = Depends(geoip_service.blacklisted_country_dependency_check),
 ):
     """
     Registers new user in the auth system
@@ -107,7 +105,7 @@ async def create_new_auth_user(
     "/getusers",
     response_model=AllUsersResponse,
     status_code=status.HTTP_200_OK,
-    summary="Fetches active and verified users",
+    summary="Fetches auth users using filters",
     tags=["Moderator", "Superadmin"],
 )
 async def get_auth_users(
@@ -219,7 +217,7 @@ async def soft_delete_auth_user(
     """
     CAUTION!!
 
-    This endpoint deletes a user from the system
+    Self delete user from the system
     """
 
     try:
@@ -235,7 +233,7 @@ async def soft_delete_auth_user(
 
 
 @user_router.delete(
-    "/delete",
+    "/delete/{user_id}",
     response_model=UserResponseModel,
     status_code=status.HTTP_200_OK,
     summary="Deletes a user in the system",
