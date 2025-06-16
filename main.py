@@ -34,6 +34,12 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
+if settings.DEBUG_MODE:
+    openapi_url = "/openapi.json"
+else:
+    openapi_url = None
+
+
 app = FastAPI(
     lifespan=lifespan,
     title="FastAPI Authentication System",
@@ -45,6 +51,8 @@ app = FastAPI(
         "url": "https://ajiboye-pius.vercel.app",
         "email": "ajiboyeadeleye080@gmail.com",
     },
+    docs_url="/documentation",
+    openapi_url=openapi_url,
     # root_path="/api/auth",
     # root_path_in_servers=False,
 )
