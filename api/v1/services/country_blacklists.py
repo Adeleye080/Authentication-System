@@ -2,7 +2,7 @@ from api.v1.models.country_blacklist import CountryBlacklist, CountryBlacklistHi
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from api.v1.models.user import User
-from typing import Tuple
+from typing import Tuple, Optional
 
 
 class CountryBlacklistService:
@@ -27,9 +27,11 @@ class CountryBlacklistService:
         """
         from api.v1.services import geoip_service
 
+        country_code = country_code.upper()
+
         already_blacklisted = (
             db.query(CountryBlacklist)
-            .filter(CountryBlacklist.country_code == country_code)
+            .filter(CountryBlacklist.country_code == country_code.upper())
             .first()
         )
         if already_blacklisted:
@@ -47,7 +49,7 @@ class CountryBlacklistService:
             country_code=country_code, reason=reason, country_name=country_name
         )
         c_blacklist_history = CountryBlacklistHistory(
-            country_code=country_code,
+            country_code=country_code.upper(),
             reason=reason,
             country_name=country_name,
             action="Added",
@@ -64,6 +66,8 @@ class CountryBlacklistService:
     ) -> Tuple[str, str]:
         """Remove a country from blacklist. save the blacklist history.\n
         Return (Country_name, country_code)"""
+
+        country_code = country_code.upper()
 
         blacklisted_country = (
             db.query(CountryBlacklist)
@@ -83,11 +87,31 @@ class CountryBlacklistService:
             db.commit()
             return blacklisted_country.country_name, blacklisted_country.country_code
         else:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Country not in blacklist",
-            )
+            return None, None
 
-    def remove_countries_from_blacklist():
+    def bulk_remove_countries_from_blacklist():
         """ """
         pass
+
+    def fetch_blacklist_history(self, db: Session, country_code: Optional[str] = None):
+        """
+        Retrieve country blacklist history.
+        Retrieves all blacklist history if `country_code` is not provided.
+
+        :param [Optional] country_code: Iso code of the country
+        """
+
+        if country_code:
+            country_code = country_code.upper()
+            return (
+                db.query(CountryBlacklistHistory)
+                .filter(CountryBlacklistHistory.country_code == country_code)
+                .order_by(CountryBlacklistHistory.id.desc())
+                .all()
+            )
+        else:
+            return (
+                db.query(CountryBlacklistHistory)
+                .order_by(CountryBlacklistHistory.id.desc())
+                .all()
+            )
