@@ -19,6 +19,7 @@ audit_log_router = APIRouter(prefix="/logs", tags=["Audit Logs"])
     response_model=AllLogsResponse,
 )
 def fetch_all_audit_logs(
+    user_id: Optional[str] = Query(None),
     event: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     start_time: Optional[datetime] = Query(None),
@@ -29,6 +30,11 @@ def fetch_all_audit_logs(
     moderator_superadmin: User = Depends(user_service.get_current_user),
 ):
     """Fetches all audit logs"""
+
+    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
+        )
 
     page = max(page, 1)
     per_page = max(per_page, 1)
@@ -42,6 +48,7 @@ def fetch_all_audit_logs(
 
     logs, total_logs = audit_log_service.fetch_logs_with_filters_and_pagination(
         db=db,
+        user_id=user_id,
         event=event,
         status=status,
         start_time=start_time,
@@ -84,29 +91,3 @@ def fetch_single_audit_log(
     single_log = audit_log_service.get(db=db, log_id=log_id)
 
     return single_log
-
-
-@audit_log_router.get(
-    "/user/{user_id}",
-    summary="Fetch all audit logs for a user",
-    status_code=status.HTTP_200_OK,
-)
-def fetch_user_audit_logs(
-    user_id: str,
-    db: Session = Depends(get_db),
-    moderator_superadmin: User = Depends(user_service.get_current_user),
-):
-    """Fetches all audit logs for a user"""
-
-    # add option to get by status, events, etc.
-
-    # admin only route
-    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
-        )
-
-    logs, no_of_logs = audit_log_service.retrieve_user_logs(db=db, user_id=user_id)
-
-    # return paginated data
-    return [log.to_dict() for log in logs]
