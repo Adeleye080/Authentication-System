@@ -261,9 +261,7 @@ if settings.ALLOW_SMS_AUTH and settings.USER_SERVICE_PHONE_NUMBER_URL != "0":
         request: Request,
         bgt: BackgroundTasks,
         db: Session = Depends(get_db),
-        validate_request_country_in_blacklist: None = Depends(
-            geoip_service.blacklisted_country_dependency_check
-        ),
+        _: None = Depends(geoip_service.blacklisted_country_dependency_check),
     ):
         """
         Sends OTP code to user via SMS to complete user login. \n
@@ -336,9 +334,7 @@ if settings.ALLOW_SMS_AUTH and settings.USER_SERVICE_PHONE_NUMBER_URL != "0":
         request: Request,
         bgt: BackgroundTasks,
         db: Session = Depends(get_db),
-        validate_request_country_in_blacklist: None = Depends(
-            geoip_service.blacklisted_country_dependency_check
-        ),
+        _: None = Depends(geoip_service.blacklisted_country_dependency_check),
     ):
         """
         Verifies OTP code sent to user via SMS.\n
