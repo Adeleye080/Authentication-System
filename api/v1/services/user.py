@@ -29,7 +29,11 @@ from api.utils.encrypters_and_decrypters import base64, cipher_suite
 import logging
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/api/v1/swagger-login")
+if settings.DEBUG_MODE:
+    oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/api/v1/swagger-login")
+else:
+    oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/api/v1/login")
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 logger = logging.getLogger(__name__)
 
@@ -335,7 +339,7 @@ class UserService(Service):
 
         if not user.is_active:
             raise HTTPException(
-                detail="User is inactive/deactivated",
+                detail="User is deactivated",
                 status_code=status.HTTP_403_FORBIDDEN,
             )
 
