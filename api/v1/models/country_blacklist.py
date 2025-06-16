@@ -19,6 +19,15 @@ class CountryBlacklist(BaseModel):
         Index("ix_blacklisted_country_reason_for_being_blacklisted", "reason"),
     )
 
+    def to_dict(self):
+        """Return dictionary representation of the instance"""
+        obj = super().to_dict()
+
+        if obj["updated_at"]:
+            del obj["updated_at"]
+
+        return obj
+
 
 class CountryBlacklistHistory(BaseModel):
     """Tracks changes to the blacklist."""
@@ -43,6 +52,19 @@ class CountryBlacklistHistory(BaseModel):
         Index("ix_blacklist_record_changed_by", "changed_by"),
         Index("ix_blacklist_history_timestamp", "timestamp"),
     )
+
+    def to_dict(self):
+        """Return dictionary representation of the instance"""
+        obj = super().to_dict()
+
+        if obj["created_at"]:
+            del obj["created_at"]
+        if obj["updated_at"]:
+            del obj["updated_at"]
+        if obj["timestamp"]:
+            obj["timestamp"] = self.timestamp.isoformat()
+
+        return obj
 
 
 # NOT USING FOREIGN KEY RELATIONSHIP TO AVOID COMPLEXITIES IN DATABASE
