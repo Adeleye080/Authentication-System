@@ -19,6 +19,7 @@ from api.v1.models.country_blacklist import CountryBlacklist
 from api.utils.settings import settings
 from api.utils.user_device_agent import get_client_ip
 import pycountry_convert as pc  # type: ignore
+import pycountry  # type: ignore
 from fastapi import HTTPException, status, Depends, Request
 from db.database import get_db
 from sqlalchemy.orm import Session
@@ -97,6 +98,19 @@ class GeoIPService:
             return continent_code
         except Exception as e:
             return f"Error: {str(e)}"
+
+    def get_country_name_from_iso_code(self, country_code: str) -> str:
+        """
+        Get the country name from an ISO Alpha-2 country code.
+        Raises ValueError if the code is invalid.
+        """
+        country = pycountry.countries.get(alpha_2=country_code.upper())
+        if not country:
+            raise HTTPException(
+                detail=f"Unknown country code: {country_code}",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        return country.name
 
     def get_geolocation_from_ip_api(self, ip_address: str) -> GeoIPResult:
         """
@@ -315,7 +329,7 @@ class GeoIPService:
         self, request: Request, db: Session = Depends(get_db)
     ):
         """
-        Routes decorator to check if the IP address is from a blacklisted country.
+        Routes dependency to check if the IP address is from a blacklisted country.
 
         Args:
             request: The request object containing the IP address
@@ -324,6 +338,16 @@ class GeoIPService:
             HTTPException: If the IP address is from a blacklisted country
         """
         ip_address = get_client_ip(request)
+
+        # user is running in dev environment
+        if ip_address in ["127.0.0.1", "0.0.0.0"]:
+            print(
+                "\033[94m"
+                + "Auth-System: Dev environment detected, skipping IP check..."
+                + "\033[0m",
+                flush=True,
+            )
+            return
 
         try:
             result = self.get_geolocation_with_fallback(ip_address=ip_address)
@@ -361,4 +385,4 @@ class GeoIPService:
                 detail=f"Access from your country ({result.country_code}) is restricted due to policy. If you believe this is an error, please contact support.",
             )
 
-        return False
+        return

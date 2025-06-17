@@ -70,7 +70,7 @@ class JsonResponseDict(JSONResponse):
             }
             response_dict.pop("data", None)
             return response_dict
-        elif self.status_code == 409:
+        elif self.status_code == 409 or 404:
             response_dict = {
                 "message": self.message,
                 "data": self.data,

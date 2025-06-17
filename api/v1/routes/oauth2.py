@@ -4,11 +4,13 @@ from authlib.integrations.starlette_client import OAuth  # type: ignore
 from starlette.requests import Request
 import logging
 from api.utils.settings import settings
+from api.utils.user_device_agent import get_device_info
 from api.v1.services import (
     oauth2_service,
     user_service,
     audit_log_service,
     notification_service,
+    devices_service,
 )
 from api.v1.models.user import User
 from api.v1.schemas.audit_logs import (
@@ -17,6 +19,7 @@ from api.v1.schemas.audit_logs import (
     AuditLogStatuses,
 )
 from api.v1.schemas.user import LoginSource
+from api.v1.services import geoip_service
 from sqlalchemy.orm import Session
 from db.database import get_db
 import random
@@ -30,7 +33,11 @@ oauth2_router = APIRouter(prefix="/oauth2", tags=["OAuth2"])
 
 
 @oauth2_router.post("/login/{provider}")
-async def login(request: Request, provider: str):
+async def login(
+    request: Request,
+    provider: str,
+    _: None = Depends(geoip_service.blacklisted_country_dependency_check),
+):
     """Login route for OAuth2 providers"""
 
     if provider not in oauth2_service.secureOAuth()._registry:
@@ -105,6 +112,24 @@ async def authorize(
         # send welcome email to user
         notification_service.send_welcome_mail(user=user, bgt=bgt)
 
+        # audit log
+        audit_log_service.log(
+            db=db,
+            background_task=bgt,
+            schema=AuditLogCreate(
+                user_id=user.id,
+                event=AuditLogEventEnum.CREATE_ACCOUNT,
+                status=AuditLogStatuses.SUCCESS,
+                ip_address="Not Available",
+                details={
+                    "provider": provider,
+                    "user_info": user_info,
+                },
+                user_agent="Not Available",
+                description=f"Account creation: created account for {user.email} via {provider} OAuth",
+            ),
+        )
+
         # send new user info to webhook url in the background
         oauth2_service.post_oauth_signup_webhook(bgt, user_info)
     else:
@@ -123,6 +148,10 @@ async def authorize(
 
     # update login source and last login time
     user.save(db=db)
+
+    # save user device
+    device_info = get_device_info(request)
+    devices_service.create_with_bgt(db=db, device_info=device_info, owner=user, bgt=bgt)
 
     # construct redirect url
     # add access and refresh tokens to the redirect uri if cookies are not allowed

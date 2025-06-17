@@ -22,7 +22,9 @@ class HomeRespData(BaseModel):
     """Data for the Home Response Model"""
 
     author: dict = {}
+    contributors: list = []
     URL: str = "Home URL"
+    documentation: str
 
 
 class HomeResponse(BaseModel):

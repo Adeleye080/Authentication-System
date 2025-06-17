@@ -19,10 +19,13 @@ from api.v1.schemas.audit_logs import (
     AuditLogStatuses,
 )
 from api.utils.responses import all_users_response
-from api.v1.services import user_service
-from api.v1.services import devices_service
-from api.v1.services import audit_log_service
-from api.v1.services import notification_service
+from api.v1.services import (
+    user_service,
+    geoip_service,
+    devices_service,
+    audit_log_service,
+    notification_service,
+)
 from api.utils.validators import check_model_existence
 from api.utils.settings import settings
 from api.utils.user_device_agent import get_device_info
@@ -45,6 +48,7 @@ async def create_new_auth_user(
     data: UserCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    _: None = Depends(geoip_service.blacklisted_country_dependency_check),
 ):
     """
     Registers new user in the auth system
@@ -78,9 +82,9 @@ async def create_new_auth_user(
             user_id=new_user.id,
             event=AuditLogEventEnum.CREATE_ACCOUNT,
             description="Created new auth user account",
-            ip_address=user_device.ip_address,
+            ip_address=device_info.get("ip_address", "Not Captured"),
             status=AuditLogStatuses.SUCCESS,
-            user_agent=user_device.user_agent,
+            user_agent=device_info.get("user_agent", "Not Captured"),
         )
         audit_log_service.log(db=db, schema=schema, background_task=background_tasks)
 
@@ -88,8 +92,8 @@ async def create_new_auth_user(
         logger.info(f"Audit Log ({new_user.email}) account creation")
 
     except Exception as exc:
-        logger.info(
-            f"Failed to Audit Log ({new_user.email}) creation, but seems account creation was successful"
+        logger.error(
+            f"Failed to Audit Log ({new_user.email}) creation, but seems account creation was successful: Error - {exc}"
         )
 
     return JsonResponseDict(
@@ -98,84 +102,26 @@ async def create_new_auth_user(
 
 
 @user_router.get(
-    "/allusers",
-    response_model=AllUsersResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Fetch users regardless of their status",
-    tags=["Moderator", "Superadmin"],
-)
-async def get_all_auth_users(
-    page: int = 1,
-    per_page: int = 10,
-    db: Session = Depends(get_db),
-    user: User = Depends(user_service.get_current_user),
-):
-    """
-    Retrieves all Auth users, typically to Superadmins or moderators.
-
-    - **Maximum** item per page is **50** and **Minimum** item per page is **1**
-
-    - **Note:** Both **active**, **deleted** and **verified** users would be returned
-    """
-
-    # perform operation to check is current user is Superadmin or moderator
-    if not any([user.is_superadmin, user.is_moderator]):
-        raise HTTPException(
-            detail="You are not authorized to access this resource",
-            status_code=status.HTTP_400_UNATHORIZED,
-        )
-
-    page = max(page, 1)
-    per_page = max(per_page, 1)
-    if per_page > 50:
-        per_page = 50
-
-    # paginated database query
-    users, total_users = user_service.fetch_all_paginated(
-        db=db, page=page, per_page=per_page
-    )
-    user_count = len(users)
-    total_pages = (total_users + per_page - 1) // per_page
-
-    if user_count == 0:
-
-        return JsonResponseDict(
-            status_code=400,
-            error="Out of range",
-            message="No users found on this page.",
-        )
-
-    return all_users_response(
-        message="retrieved all users",
-        current_page=page,
-        per_page=per_page,
-        total=total_users,
-        total_pages=total_pages,
-        count=user_count,
-        status_code=200,
-        data=[user.to_dict() for user in users],
-        prev_page=f"/?page={page - 1}" if page > 1 else None,
-        next_page=f"/?page={page + 1}" if page < total_pages else None,
-    )
-
-
-@user_router.get(
     "/getusers",
     response_model=AllUsersResponse,
     status_code=status.HTTP_200_OK,
-    summary="Fetches active and verified users",
+    summary="Fetches auth users using filters",
     tags=["Moderator", "Superadmin"],
 )
-async def get_active_and_verified_auth_users(
+async def get_auth_users(
     page: int = 1,
-    per_page: int = 10,
+    per_page: int = 50,
+    active: bool = True,
+    verified: bool = True,
+    deleted: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(user_service.get_current_user),
 ):
     """
-    Retrieves only **active** and **verified** Auth users from the system.
-
-    - **Maximum** item per page is **50** and **Minimum** item per page is **1**
+    Retrieves Auth users from the system.\n
+    Use the `deleted`, `active` and `verified` filters to get the desired result.\n
+    **NOTE:**
+    - **Maximum** item per page is **50** and **Minimum** item per page is **1**, If set outside the scope, the default values would be used.
     """
 
     page = max(page, 1)
@@ -183,14 +129,13 @@ async def get_active_and_verified_auth_users(
     if per_page > 50:
         per_page = 50
 
-    # in the future add paginated database query
     users, total_users = user_service.fetch_all_paginated_with_filters(
         db=db,
         page=page,
         per_page=per_page,
-        is_active=True,
-        is_deleted=False,
-        is_verified=True,
+        is_active=active,
+        is_deleted=deleted,
+        is_verified=verified,
     )
     user_count = len(users)
     total_pages = (total_users + per_page - 1) // per_page
@@ -272,7 +217,7 @@ async def soft_delete_auth_user(
     """
     CAUTION!!
 
-    This endpoint deletes a user from the system
+    Self delete user from the system
     """
 
     try:
@@ -288,7 +233,7 @@ async def soft_delete_auth_user(
 
 
 @user_router.delete(
-    "/delete",
+    "/delete/{user_id}",
     response_model=UserResponseModel,
     status_code=status.HTTP_200_OK,
     summary="Deletes a user in the system",

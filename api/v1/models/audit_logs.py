@@ -1,8 +1,6 @@
-from sqlalchemy import Column, String, Text, JSON, DateTime, func, Index, Enum
+from sqlalchemy import Column, String, Text, JSON, DateTime, func, Index, Integer
 from db.database import Base
 from fastapi import Depends
-from uuid_extensions import uuid7
-from api.v1.schemas.audit_logs import AuditLogEventEnum
 
 
 class AuditLog(Base):
@@ -10,9 +8,9 @@ class AuditLog(Base):
 
     __tablename__ = "auth_audit_logs"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid7()))
+    id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String(36), nullable=False)
-    event = Column(Enum(AuditLogEventEnum), nullable=False)
+    event = Column(String(100), nullable=False)
     status = Column(String(50), nullable=False)
     description = Column(Text, nullable=False)
     timestamp = Column(

@@ -5,6 +5,8 @@ from api.v1.services.notification import Notification
 from api.v1.services.totp import TOTPService
 from api.v1.services.oauth2 import OAuth2Service
 from api.v1.services.geoip import GeoIPService
+from api.v1.services.country_blacklists import CountryBlacklistService
+from api.v1.services.app_services import ApplicationService
 
 user_service = UserService()
 devices_service = DevicesService()
@@ -13,3 +15,5 @@ notification_service = Notification()
 totp_service = TOTPService()
 oauth2_service = OAuth2Service()
 geoip_service = GeoIPService()
+country_blacklist_service = CountryBlacklistService()
+application_service = ApplicationService()

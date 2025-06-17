@@ -2,10 +2,36 @@ import time
 import logging
 from functools import wraps
 from typing import Callable
-from fastapi import Request
+from api.v1.models.user import User
 
 
 logger = logging.getLogger(__name__)
+
+
+def log_failure(recipient: str, subject: str, retries: int = 2) -> None:
+    """Log decorator failure"""
+
+    from api.v1.services import audit_log_service
+    from api.v1.schemas.audit_logs import (
+        AuditLogCreate,
+        AuditLogEventEnum,
+        AuditLogStatuses,
+    )
+
+    recipient_user = User().get_by_email(email=recipient)
+
+    log_description = (
+        f"Failed to send mail ({subject}) to {recipient} after {retries} attempts."
+    )
+    schema = AuditLogCreate(
+        user_id=recipient_user.id,
+        event=AuditLogEventEnum.MAIL_ERROR,
+        description=log_description,
+        ip_address=None,
+        user_agent=None,
+        status=AuditLogStatuses.FAILED,
+    )
+    audit_log_service.log_without_bgt(schema=schema)
 
 
 # Simple retry decorator
@@ -37,28 +63,13 @@ def send_email_retry_on_failure_with_fallback(
                     time.sleep(delay)  # Wait before retrying
 
             if not use_backup:
-                from api.v1.services import audit_log_service
-                from api.v1.schemas.audit_logs import (
-                    AuditLogCreate,
-                    AuditLogEventEnum,
-                    AuditLogStatuses,
-                )
-
                 logger.info("All retries failed.")
 
-                recipient = kwargs["recipient"]
-                if len(recipient) > 36:
-                    recipient = recipient[:33] + "..."
-                log_description = f"Failed to send mail ({kwargs['subject']}) to {recipient} after {retries} attempts."
-                schema = AuditLogCreate(
-                    user_id=recipient,
-                    event=AuditLogEventEnum.MAIL_ERROR,
-                    description=log_description,
-                    ip_address=None,
-                    user_agent=None,
-                    status=AuditLogStatuses.FAILED,
+                log_failure(
+                    recipient=kwargs["recipient"],
+                    subject=kwargs["subject"],
+                    retries=retries,
                 )
-                audit_log_service.log_without_bgt(schema=schema)
             else:
                 logger.info("All retries failed. Falling back to backup mail sender.")
 
@@ -87,6 +98,11 @@ def send_email_retry_on_failure_with_fallback(
                         logger.exception(
                             f"❌ Mailgun failed to resend mail ({subject}) to {recipient}, exception occured: {e}"
                         )
+                        log_failure(
+                            recipient=recipient,
+                            subject=subject,
+                            retries=retries,
+                        )
 
                 else:
                     from smtp.mailing import _send_email_smtp_backup
@@ -102,6 +118,11 @@ def send_email_retry_on_failure_with_fallback(
                     except Exception as e:
                         logger.exception(
                             f"❌ failed to resend mail ({subject}) to {recipient}, exception occured: {e}"
+                        )
+                        log_failure(
+                            recipient=recipient,
+                            subject=subject,
+                            retries=retries,
                         )
 
         return wrapper

@@ -32,10 +32,13 @@ class Settings(BaseSettings):
         cast=str,
     )
 
-    # APPLICATION SECRETS
+    # APPLICATION SPECIFIC CONFIG
     SECRET_KEY: str = config("SECRET_KEY")
     ALGORITHM: str = config("ALGORITHM")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = config("ACCESS_TOKEN_EXPIRE_MINUTES")
+    APP_SERVICE_TOKEN_EXPIRE_HOUR: int = config(
+        "APP_SERVICE_TOKEN_EXPIRE_HOUR", cast=int, default=5
+    )
     VERIFICATION_TOKEN_EXPIRATION_TIME: int = config(
         "VERIFICATION_TOKEN_EXPIRATION_TIME", cast=int, default=600
     )  # 10 minutes
@@ -45,6 +48,13 @@ class Settings(BaseSettings):
     ALLOW_AUTH_COOKIES: bool = config("ALLOW_AUTH_COOKIES", cast=bool, default=True)
     AUTH_SECURE_COOKIES: bool = config("SECURE_COOKIES", cast=bool, default=True)
     AUTH_SAME_SITE: str = config("SAME_SITE", cast=str, default="strict")
+
+    ALLOW_SMS_AUTH: bool = config("ALLOW_SMS_AUTH", default=False, cast=bool)
+    USER_SERVICE_PHONE_NUMBER_URL: str = config(
+        "USER_SERVICE_PHONE_NUMBER_URL", cast=str, default="0"
+    )
+
+    DEBUG_MODE: bool = config("DEBUG_MODE", cast=bool, default=False)
 
     # DATABASE CONFIG
     DB_HOST: str = config("DB_HOST")
@@ -81,6 +91,9 @@ class Settings(BaseSettings):
     APP_URL: str = config("APP_URL", default="fastapi-authsystem.example.com")
 
     FRONTEND_HOME_URL: str = config("FRONTEND_HOME_URL")
+    FRONTEND_DASHBOARD_URL: str = config(
+        "FRONTEND_DASHBOARD_URL", cast=str, default=""
+    )  # Optional
     FRONTEND_EMAIL_VERIFICATION_URL: str = config(
         "FRONTEND_EMAIL_VERIFICATION_URL",
         default=f"{FRONTEND_HOME_URL.strip('/')}/auth/verify-email",

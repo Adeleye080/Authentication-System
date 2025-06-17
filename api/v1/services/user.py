@@ -26,10 +26,16 @@ from api.v1.schemas.user import (
 )
 from api.core.base.services import Service
 from api.utils.encrypters_and_decrypters import base64, cipher_suite
+import logging
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/swagger-login")
+if settings.DEBUG_MODE:
+    oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/api/v1/swagger-login")
+else:
+    oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/api/v1/login")
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+logger = logging.getLogger(__name__)
 
 
 class UserService(Service):
@@ -40,7 +46,7 @@ class UserService(Service):
 
         if db.query(User).filter(User.email == schema.email).first():
             raise HTTPException(
-                status_code=400,
+                status_code=409,
                 detail="User with this email already exists",
             )
 
@@ -54,6 +60,8 @@ class UserService(Service):
             db.commit()
             db.refresh(user)
         except Exception as exc:
+            # log error
+            print(exc)
             raise HTTPException(status_code=500, detail="There was a database error")
 
         return user
@@ -115,9 +123,9 @@ class UserService(Service):
         db: Session,
         page: int,
         per_page: int,
-        is_active: Optional[bool] = True,
-        is_deleted: Optional[bool] = False,
-        is_verified: Optional[bool] = True,
+        is_active: bool = True,
+        is_deleted: bool = False,
+        is_verified: bool = True,
     ) -> Tuple[List[User], int]:
         """
         Fetch all auth users in the system with optional filters.
@@ -125,9 +133,9 @@ class UserService(Service):
         Args:
             :param page: int: page number
             :param per_page: int: number of items per page
-            :param is_active: Optional[bool]: Filter users based on active status
-            :param is_deleted: Optional[bool]: Filter users based on deletion status
-            :param is_verified: Optional[bool]: Filter users based on verification status
+            :param is_active: bool: Filter users based on active status
+            :param is_deleted: bool: Filter users based on deletion status
+            :param is_verified: bool: Filter users based on verification status
 
         Returns:
             :return: Tuple[List[User], int]: Tuple of users and total number of users matching filters
@@ -135,32 +143,29 @@ class UserService(Service):
         # Calculate the offset for pagination
         offset = (page - 1) * per_page
 
-        # Base query
-        query = db.query(User)
-
-        # Apply optional filters
-        if is_active is not None:
-            query = query.filter(User.is_active == is_active)
-        if is_deleted is not None:
-            query = query.filter(User.is_deleted == is_deleted)
-        if is_verified is not None:
-            query = query.filter(User.is_verified == is_verified)
-
-        # Get paginated users
-        users = query.offset(offset).limit(per_page).all()
+        # Make query
+        users = (
+            db.query(User)
+            .filter(
+                *(
+                    User.is_active == is_active,
+                    User.is_deleted == is_deleted,
+                    User.is_verified == is_verified,
+                )
+            )
+            .offset(offset)
+            .limit(per_page)
+            .all()
+        )
 
         # Get the total number of filtered users
         total = (
             db.query(func.count(User.id))
             .filter(
                 *(
-                    User.is_active == is_active if is_active is not None else True,
-                    User.is_deleted == is_deleted if is_deleted is not None else False,
-                    (
-                        User.is_verified == is_verified
-                        if is_verified is not None
-                        else True
-                    ),
+                    User.is_active == is_active,
+                    User.is_deleted == is_deleted,
+                    User.is_verified == is_verified,
                 )
             )
             .scalar()
@@ -334,7 +339,7 @@ class UserService(Service):
 
         if not user.is_active:
             raise HTTPException(
-                detail="User is inactive/deactivated",
+                detail="User is deactivated",
                 status_code=status.HTTP_403_FORBIDDEN,
             )
 
@@ -394,6 +399,7 @@ class UserService(Service):
 
             encoded_jwt = jwt.encode(data, settings.SECRET_KEY, settings.ALGORITHM)
         except Exception as exc:
+            print(exc)
             raise HTTPException(
                 status_code=500, detail="Failed to generate user access token"
             ) from exc
@@ -590,10 +596,50 @@ class UserService(Service):
             owner = self.fetch_by_id(db=db, id=token.id)
             self.perform_user_check(user=owner)
 
-            access = self.create_access_token(user_id=token.id)
+            access = self.create_access_token(db=db, user_obj=owner)
             refresh = self.create_refresh_token(db=db, user_id=token.id)
 
             return (access, refresh)
+
+    def get_user_object_using_refresh_token(
+        self, refresh_token: str, db: Session
+    ) -> User | None:
+        """decode and return token owner object"""
+
+        credentials_exception = HTTPException(
+            status_code=401,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+        try:
+
+            # Decode the refresh token
+            payload = jwt.decode(
+                refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+            )
+            user_id = payload.get("sub")
+            token_type = payload.get("type")
+
+            if user_id is None:
+                raise credentials_exception
+
+            if token_type != "refresh":
+                raise credentials_exception
+
+            owner = self.fetch_by_id(db=db, id=user_id)
+
+        except ExpiredSignatureError:
+            logger.critical(
+                f"Detected jwt refresh token with unrecognized signature. Token: {refresh_token}",
+                exc_info=1,
+            )
+            raise credentials_exception
+
+        except Exception as exc:
+            raise credentials_exception
+
+        return owner
 
     def get_current_user(
         self, access_token: str = Security(oauth2_scheme), db: Session = Depends(get_db)
@@ -702,8 +748,8 @@ class UserService(Service):
         user.is_active = False
 
         # Create reactivation token
-        token = self.create_access_token(user_id=user.id)
-        reactivation_link = f"https://{request.url.hostname}/api/v1/users/accounts/reactivate?token={token}"
+        token = self.create_access_token(db=db, user_obj=user)
+        reactivation_link = f"https://{settings.FRONTEND_HOME_URL.strip('/')}/accounts/reactivate?token={token}"
 
         db.commit()
 
@@ -787,7 +833,7 @@ class UserService(Service):
         self._batch_delete_refresh_tokens(db=db, user_id=user.id)
 
         # create new credentials
-        new_access_token = self.create_access_token(user_id=user.id)
+        new_access_token = self.create_access_token(db=db, user_obj=user)
         new_refresh_token = self.create_refresh_token(db=db, user_id=user.id)
 
         return (

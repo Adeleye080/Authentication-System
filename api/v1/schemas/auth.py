@@ -43,39 +43,42 @@ class TOTPTokenSchema(BaseModel):
 
 
 class TOTPVerificationRequest(BaseModel):
-    email: Optional[EmailStr] = Field(...)
-    username: Optional[str] = Field(...)
+    email: EmailStr = Field(...)
     otp: str = Field(...)
     temp_code: Optional[str] = Field(
-        ..., description="Temporary login token to verify user identity, tracks user."
+        None,
+        description="Temporary login token to verify user identity and tracks user.",
     )
 
     @model_validator(mode="before")
     @classmethod
     def validate_otp(cls, values: dict):
-        """Validate TOTP code if provided"""
+        """Validate TOTP and temp_code if provided"""
 
         if not isinstance(values, dict):
             return values
 
         totp_code = values.get("otp", None)
+        temp_code = values.get("temp_code", None)
         if totp_code:
 
             if not TOTPTokenSchema.validate_totp_code(totp_code):
                 raise ValueError("TOTP code must be a 6-digit number")
+
+        if not temp_code or temp_code == "string":
+            temp_code = None
 
         return values
 
     @model_validator(mode="before")
     @classmethod
     def validate_email_username_inputs(cls, values: dict):
-        """Validates email and username inputs, ensures one of the 2 must be given."""
+        """Ensure email is given."""
 
-        username = values.get("username", None)
         email = values.get("email", None)
 
-        if not username and not email:
-            raise ValueError("Username or email must be given")
+        if not email:
+            raise ValueError("email must be given")
 
         return values
 
@@ -88,10 +91,9 @@ class Completed2FASetupResponse(BaseModel):
     status: str = "success"
 
 
-class SMSAndEMAILOTPVerificationRequest(BaseModel):
+class SMSOTPVerificationRequest(BaseModel):
     email: Optional[EmailStr] = Field(...)
-    username: Optional[str] = Field(...)
-    otp: str = Field(..., description="6-digit OTP code received via SMS or email")
+    otp: str = Field(..., description="6-digit OTP code received via SMS")
     temp_code: Optional[str] = Field(
         ..., description="Temporary login token to verify user identity, tracks user."
     )
@@ -119,48 +121,30 @@ class SMSAndEMAILOTPVerificationRequest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validate_email_username_inputs(cls, values: dict):
-        """Validates email and username inputs, ensures one of the 2 must be given."""
+        """Validates email given."""
 
-        username = values.get("username", None)
         email = values.get("email", None)
 
-        if not username and not email:
-            raise ValueError("Username or email must be given")
+        if not email:
+            raise ValueError("email must be given")
 
         return values
 
 
-class SMSAndEmailOTPCodeRequest(BaseModel):
+class SMSOTPCodeRequest(BaseModel):
     """schema for OTP code request"""
 
-    email: Optional[EmailStr] = Field(...)
-    username: Optional[str] = Field(...)
-    delivery_method: str = Field(
-        ..., description="Method of OTP delivery. Can be 'sms' or 'email'."
-    )
+    email: EmailStr = Field(...)
 
     @model_validator(mode="before")
     @classmethod
     def validate_email_username_inputs(cls, values: dict):
         """Validates email and username inputs, ensures one of the 2 must be given."""
 
-        username = values.get("username", None)
         email = values.get("email", None)
 
-        if not username and not email:
-            raise ValueError("Username or email must be given")
-
-        return values
-
-    @model_validator(mode="before")
-    @classmethod
-    def validate_delivery_method(cls, values: dict):
-        """Validates delivery method input, ensures it is either 'sms' or 'email'."""
-
-        delivery_method = values.get("delivery_method", None)
-
-        if delivery_method not in ["sms", "email"]:
-            raise ValueError("Delivery method must be either 'sms' or 'email'")
+        if not email:
+            raise ValueError("email must be given")
 
         return values
 

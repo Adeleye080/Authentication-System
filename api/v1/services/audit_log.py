@@ -3,12 +3,13 @@ Audit Logging Module
 """
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, desc, and_
 from fastapi import HTTPException, status
 from fastapi import BackgroundTasks
 from db.database import get_db
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, Optional
+from datetime import datetime
 from api.v1.models.audit_logs import AuditLog
 from api.v1.schemas.audit_logs import AuditLogSchema, AuditLogCreate
 
@@ -17,12 +18,12 @@ logger = logging.getLogger(__name__)
 
 
 class AuditLogService:
-    """ """
+    """Audit Logs Service"""
 
-    def get(self, db: Session, log_id: str):
+    def get(self, db: Session, log_id: int):
         """Get A single Audit Log"""
 
-        log = db.query(AuditLog).filter_by(AuditLog.id == log_id).first()
+        log = db.query(AuditLog).filter(AuditLog.id == log_id).first()
         if not log:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -44,6 +45,46 @@ class AuditLogService:
             )
 
         return logs
+
+    def fetch_logs_with_filters_and_pagination(
+        self,
+        db: Session,
+        user_id: Optional[str] = None,
+        event: Optional[str] = None,
+        status: Optional[str] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        page: int = 1,
+        limit: int = 100,
+    ) -> Tuple[str, str]:
+        """
+        Fetch audit logs with optional filters and pagination.
+
+        Returns a tuple (logs, logs_count)
+        """
+        query = db.query(AuditLog)
+        conditions = []
+        offset = (page - 1) * limit
+
+        if event:
+            conditions.append(AuditLog.event == event)
+        if user_id:
+            conditions.append(AuditLog.user_id == user_id)
+        if status:
+            conditions.append(AuditLog.status == status)
+        if start_time:
+            conditions.append(AuditLog.timestamp >= start_time)
+        if end_time:
+            conditions.append(AuditLog.timestamp <= end_time)
+
+        if conditions:
+            query = query.filter(and_(*conditions))
+
+        query = query.order_by(AuditLog.id.desc())
+        total = query.count()
+        logs = query.offset(offset).limit(limit).all()
+
+        return logs, total
 
     def create(self, db: Session, schema: AuditLogCreate):
         """
@@ -70,7 +111,7 @@ class AuditLogService:
 
         background_task.add_task(self.create, db=db, schema=schema)
 
-    def log_without_bgt(self, schema: AuditLogCreate, db: Session = None):
+    def log_without_bgt(self, schema: Optional[AuditLogCreate], db: Session = None):
         """
         Create new log entry without using background task\n
         db is also optional
@@ -97,30 +138,3 @@ class AuditLogService:
                 db_generator.close()
 
         return log
-
-    def retrieve_user_logs(
-        self, db: Session, user_id: str, page: int = 1, per_page: int = 50
-    ) -> Tuple[List[AuditLog], any]:
-        """Retrieves logs belonging to a user
-
-        Args:
-            - page: page number
-            - per_page: number of items per page
-
-        Returns:
-        """
-        # Calculate the offset for pagination
-        offset = (page - 1) * per_page
-
-        logs = (
-            db.query(AuditLog)
-            .filter(AuditLog.user_id == user_id)
-            .offset(offset)
-            .limit(per_page)
-            .all()
-        )
-
-        # Query to get the total number of logs
-        total_logs = db.query(func.count(AuditLog.id)).scalar()
-
-        return logs, total_logs

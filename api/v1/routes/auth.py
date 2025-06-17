@@ -27,6 +27,7 @@ from api.v1.schemas.user import (
     EmailStr,
     PasswordChangeRequest,
     PasswordResetRequest,
+    ForgotPasswordRequest,
     MagicLinkToken,
     MagicLinkRequest,
 )
@@ -51,7 +52,6 @@ from api.v1.services import (
 
 
 auth_router = APIRouter(tags=["Auth"])
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/swagger-login")
 logger = logging.getLogger(__name__)
 
 
@@ -63,9 +63,7 @@ async def login(
     data: UserLogin,
     bgt: BackgroundTasks,
     db: Session = Depends(get_db),
-    validate_request_country_in_blacklist=Depends(
-        geoip_service.blacklisted_country_dependency_check
-    ),
+    _: None = Depends(geoip_service.blacklisted_country_dependency_check),
 ):
     """Logs client in
 
@@ -116,6 +114,13 @@ async def login(
 
     user.email  # load object attrs
 
+    # save user device info
+    device_info = await get_device_info(request)
+    if device_info:
+        devices_service.create_with_bgt(
+            db=db, owner=user, device_info=device_info, bgt=bgt
+        )
+
     response = auth_response(
         status="success",
         status_code=200,
@@ -146,14 +151,13 @@ async def login(
         )
 
     # audit log
-    device_info = await get_device_info(request)
     audit_log_service.log(
         db=db,
         background_task=bgt,
         schema=AuditLogCreate(
             user_id=user.id,
             event=AuditLogEventEnum.LOGIN,
-            description="user logged in",
+            description="user logged in with password",
             status=AuditLogStatuses.SUCCESS,
             ip_address=device_info.get("ip_address"),
             user_agent=device_info.get("user_agent"),
@@ -199,6 +203,7 @@ async def request_magic_link_login(
     bgt: BackgroundTasks,
     email: MagicLinkRequest,
     db: Session = Depends(get_db),
+    _: None = Depends(geoip_service.blacklisted_country_dependency_check),
 ):
     """Send magic link to user"""
 
@@ -206,7 +211,7 @@ async def request_magic_link_login(
     user_service.perform_user_check(user=user)
 
     # send magic link mail to user
-    link = notification_service.send_magic_link_mail(user=user, bgt=bgt)
+    notification_service.send_magic_link_mail(user=user, bgt=bgt)
 
     # loging the event in audit logs
     device_info = await get_device_info(request)
@@ -239,6 +244,7 @@ async def magic_link_login(
     bgt: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
+    _: None = Depends(geoip_service.blacklisted_country_dependency_check),
 ):
     """verifies magic link token and logs user in"""
 
@@ -247,12 +253,19 @@ async def magic_link_login(
     user_access_token = user_service.create_access_token(user_obj=user, db=db)
     user_refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
 
-    user.email  # essential to load the user object attributes.
+    user.email  # load the user object attributes.
+
+    # save user device info (if new device)
+    device_info = await get_device_info(request)
+    if device_info:
+        devices_service.create_with_bgt(
+            db=db, owner=user, device_info=device_info, bgt=bgt
+        )
 
     response = auth_response(
         status="success",
         status_code=200,
-        message="Login was successful",
+        message="Login successful",
         user_data=user.to_dict(),
         refresh_token=user_refresh_token,
         access_token=user_access_token,
@@ -278,7 +291,6 @@ async def magic_link_login(
         )
 
         # loging the event in audit logs
-        device_info = await get_device_info(request)
         audit_log_service.log(
             db=db,
             schema=AuditLogCreate(
@@ -332,7 +344,10 @@ async def logout(
 @auth_router.post("/refresh", status_code=status.HTTP_200_OK)
 async def refresh(
     refresh_token_schema: RefreshTokenRequest,
+    bgt: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
+    _: None = Depends(geoip_service.blacklisted_country_dependency_check),
 ):
     """Refreshes user token"""
 
@@ -341,9 +356,8 @@ async def refresh(
     )
 
     # perform other logic such as setting cookies
-    # loging the event in audit logs
 
-    return JsonResponseDict(
+    response = JsonResponseDict(
         message="Token refreshed",
         status="success",
         status_code=status.HTTP_200_OK,
@@ -353,6 +367,33 @@ async def refresh(
         },
     )
 
+    # user info
+    user = user_service.get_user_object_using_refresh_token(
+        refresh_token=refresh_token_schema.refresh_token, db=db
+    )
+    # user device info
+    device_info = await get_device_info(request)
+    if device_info:
+        devices_service.create_with_bgt(
+            db=db, owner=user, device_info=device_info, bgt=bgt
+        )
+
+    # loging the event in audit logs
+    audit_log_service.log(
+        db=db,
+        background_task=bgt,
+        schema=AuditLogCreate(
+            user_id=user.id,
+            event=AuditLogEventEnum.LOGIN,
+            description="user refreshed their auth tokens",
+            status=AuditLogStatuses.SUCCESS,
+            ip_address=device_info.get("ip_address"),
+            user_agent=device_info.get("user_agent"),
+        ),
+    )
+
+    return response
+
 
 # PASSWORD RELATED ENDPOINTS
 @auth_router.post(
@@ -361,11 +402,13 @@ async def refresh(
     status_code=status.HTTP_200_OK,
 )
 async def forgot_password(
-    email: EmailStr, bgt: BackgroundTasks, db: Session = Depends(get_db)
+    data: ForgotPasswordRequest,
+    bgt: BackgroundTasks,
+    db: Session = Depends(get_db),
 ):
     """Request password reset"""
 
-    user = user_service.fetch(db=db, email=email)
+    user = user_service.fetch(db=db, email=data.email)
 
     if user:
         notification_service.send_password_reset_mail(user=user, bgt=bgt)
@@ -382,9 +425,12 @@ async def forgot_password(
     status_code=status.HTTP_200_OK,
 )
 async def reset_password(
+    request: Request,
+    bgt: BackgroundTasks,
     token: str = Query(..., description="Password reset token"),
     data: PasswordResetRequest = Body(..., description="New Password"),
     db: Session = Depends(get_db),
+    _: None = Depends(geoip_service.blacklisted_country_dependency_check),
 ):
     """Reset user password"""
 
@@ -408,8 +454,22 @@ async def reset_password(
     )
 
     # send notification to user
+    notification_service.send_success_password_reset_or_changed_mail(user=user, bgt=bgt)
 
     # loging the event in audit logs
+    device_info = await get_device_info(request)
+    audit_log_service.log(
+        db=db,
+        background_task=bgt,
+        schema=AuditLogCreate(
+            user_id=user.id,
+            event=AuditLogEventEnum.RESET_PASSWORD,
+            description="User reset their account password",
+            status=AuditLogStatuses.SUCCESS,
+            ip_address=device_info.get("ip_address", "N/A"),
+            user_agent=device_info.get("user_agent", "N/A"),
+        ),
+    )
 
     return JsonResponseDict(
         message="Password reset successful",
@@ -428,6 +488,8 @@ async def reset_password(
 )
 async def change_password(
     data: PasswordChangeRequest,
+    bgt: BackgroundTasks,
+    request: Request,
     user: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -445,9 +507,23 @@ async def change_password(
         new_password=data.new_password, old_password=data.old_password, user=user, db=db
     )
 
-    # notify user of password change
+    # send notification to user
+    notification_service.send_success_password_reset_or_changed_mail(user=user, bgt=bgt)
 
     # loging the event in audit logs
+    device_info = await get_device_info(request)
+    audit_log_service.log(
+        db=db,
+        background_task=bgt,
+        schema=AuditLogCreate(
+            user_id=user.id,
+            event=AuditLogEventEnum.CHANGED_PASSWORD,
+            description="User changed their account password",
+            status=AuditLogStatuses.SUCCESS,
+            ip_address=device_info.get("ip_address", "N/A"),
+            user_agent=device_info.get("user_agent", "N/A"),
+        ),
+    )
 
     return JsonResponseDict(
         message="Password changed successfully",
