@@ -84,7 +84,7 @@ def root(request: Request):
     status_code=status.HTTP_200_OK,
     response_model=HomeResponse,
 )
-async def home():
+async def home(request: Request):
     """
     Homepage
     """
@@ -99,8 +99,8 @@ async def home():
                 "github": "https://github.com/Adeleye080",
             },
             "contributors": [],
-            "URL": "site_url",
-            "documentation": "docs_url",
+            "URL": f"{str(request.base_url).strip('/')}/auth/system/home",
+            "documentation": f"{str(request.base_url).strip('/')}/documentation",
         },
     }
 
