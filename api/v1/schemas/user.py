@@ -518,3 +518,19 @@ class MagicLinkToken(BaseModel):
 
 class MagicLinkRequest(BaseModel):
     email: EmailStr = Field(...)
+
+
+class AccountReactivationRequest(BaseModel):
+    """ """
+
+    email: str = Field(
+        ...,
+        description="Email of the account to be reactivated",
+        examples=["user@auth-system.com"],
+    )
+
+
+class UserSelfDeleteRequest(BaseModel):
+    """schema for self delete request"""
+
+    pasword: str = Field(..., description="user's account password")
