@@ -168,3 +168,61 @@ class Notification:
             phone_number=number,
             message=f"Your OTP code is {otp_code}\n\nPlease do not share this code with anyone.",
         )
+
+    def send_account_reactivation_link(
+        self,
+        user: User,
+        reactivation_link: str,
+        link_validity_days: int,
+        bgt: BackgroundTasks,
+    ) -> None:
+        """Sends account reactivation link email to user"""
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Your account reactivation link",
+            template_name="account_reactivation_link.html",
+            template_context={
+                "username": user.email,
+                "linkValidity": link_validity_days,
+                "reactivationLink": reactivation_link,
+            },
+        )
+
+    def send_success_account_reactivation_mail(
+        self, user: User, bgt: BackgroundTasks
+    ) -> None:
+        """Send mail to user  after successful account reactivation"""
+
+        template_context = {
+            "dashboardLink": settings.FRONTEND_DASHBOARD_URL.strip("/")
+            or settings.FRONTEND_HOME_URL.strip("/"),
+            "username": user.email,
+        }
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Your account is active!",
+            template_name="success_account_reactivation.html",
+            template_context=template_context,
+        )
+
+    def send_account_deactivation_mail(
+        self, user: User, reactivation_link: str, bgt: BackgroundTasks
+    ) -> None:
+        """Send mail to user after successful account deactivation"""
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Account Deactivated",
+            template_name="account_deactivation.html",
+            template_context={
+                "username": user.email,
+                "reactivationLink": (
+                    reactivation_link.strip("/") if reactivation_link else None
+                ),
+            },
+        )
