@@ -427,6 +427,32 @@ class UserService(Service):
 
         return encoded_jwt
 
+    def create_account_reactivation_link(self, user: User, validity: int = 3) -> str:
+        """
+        Generates an account reactivation link
+
+        :param user: User object
+        :param validity: token validity period (days)
+        """
+
+        data = {
+            "u": user.id,
+            "exp": dt.datetime.now(tz=dt.timezone.utc) + dt.timedelta(days=validity),
+            "type": "activation",
+        }
+        token = jwt.encode(data, settings.SECRET_KEY, settings.ALGORITHM)
+
+        link_append = f"/accounts/reactivate?token={token}"
+
+        if not settings.FRONTEND_ACOUNT_REACTIVATION_URL == "0":
+            reactivation_link = (
+                f"{settings.FRONTEND_ACOUNT_REACTIVATION_URL.strip('/')}" + link_append
+            )
+        else:
+            reactivation_link = f"{settings.FRONTEND_HOME_URL.strip('/')}" + link_append
+
+        return reactivation_link, validity
+
     def _batch_delete_refresh_tokens(self, db: Session, user_id: str) -> None:
         """Function to delete all refresh tokens for a user"""
 
@@ -731,12 +757,11 @@ class UserService(Service):
 
     def deactivate_user(
         self,
-        request: Request,
         db: Session,
         schema: DeactivateUserSchema,
         user: User,
-    ):
-        """Function to deactivate a user"""
+    ) -> str:
+        """Function to deactivate a user. return a reactivation link"""
 
         if not schema.confirmation:
             raise HTTPException(
@@ -747,15 +772,14 @@ class UserService(Service):
 
         user.is_active = False
 
-        # Create reactivation token
-        token = self.create_access_token(db=db, user_obj=user)
-        reactivation_link = f"https://{settings.FRONTEND_HOME_URL.strip('/')}/accounts/reactivate?token={token}"
+        # Create reactivation link
+        reactivation_link, _ = self.create_account_reactivation_link(user=user)
 
         db.commit()
 
         return reactivation_link
 
-    def reactivate_user(self, db: Session, token: str):
+    def reactivate_user(self, db: Session, email: str, token: str) -> User:
         """This function reactivates a user account"""
 
         # Validate the token
@@ -763,25 +787,54 @@ class UserService(Service):
             payload = jwt.decode(
                 token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
             )
-            user_id = payload.get("user_id")
+            user_id = payload.get("u")
 
             if user_id is None:
+                raise HTTPException(400, "Invalid token")
+            if payload.get("type", None) != "activation":
                 raise HTTPException(400, "Invalid token")
 
         except JWTError:
             raise HTTPException(400, "Invalid token")
 
-        user = db.query(User).filter(User.id == user_id).first()
+        try:
+            user = self.fetch_by_id(db=db, id=user_id)
 
-        if user.is_active:
-            raise HTTPException(400, "User is already active")
+            if user.is_active:
+                raise HTTPException(409, "user is already active")
 
-        user.is_active = True
+            if user.email != email:
+                raise HTTPException(400, "token and email given are not associated")
 
-        db.commit()
-        db.refresh(user)
+            user.is_active = True
 
-        return True
+            db.commit()
+            db.refresh(user)
+        except HTTPException as exc:
+            raise exc
+        except Exception:
+            db.rollback()
+            raise HTTPException(500, "An error occurred on our end")
+
+        return user
+
+    def admin_activate_user(self, db: Session, user_id: str) -> User:
+        """Activate user without requiring activation token"""
+
+        try:
+            user = self.fetch_by_id(db=db, id=user_id)
+
+            user.is_active = True
+
+            db.commit()
+            db.refresh(user)
+        except HTTPException as exc:
+            raise exc
+        except Exception:
+            db.rollback()
+            raise HTTPException(500, "An error occurred on our end")
+
+        return user
 
     def change_password(
         self,
