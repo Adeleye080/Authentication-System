@@ -1,4 +1,14 @@
-from fastapi import APIRouter, status, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import (
+    APIRouter,
+    status,
+    Depends,
+    HTTPException,
+    Request,
+    BackgroundTasks,
+    Query,
+    Path,
+)
+from pydantic import EmailStr
 from uuid import UUID
 from sqlalchemy.orm import Session
 from db.database import get_db
@@ -12,6 +22,9 @@ from api.v1.schemas.user import (
     UserUpdateSchema,
     UserUpdateResponseModel,
     AllUsersResponse,
+    AccountReactivationRequest,
+    UserSelfDeleteRequest,
+    DeactivateUserSchema,
 )
 from api.v1.schemas.audit_logs import (
     AuditLogCreate,
@@ -26,22 +39,24 @@ from api.v1.services import (
     audit_log_service,
     notification_service,
 )
-from api.utils.validators import check_model_existence
 from api.utils.settings import settings
 from api.utils.user_device_agent import get_device_info
-from smtp.mailing import send_mail
 import logging
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from api.v1.services import user_service, notification_service
+from api.v1.models.user import User
+from api.utils.json_response import JsonResponseDict
 
 
-user_router = APIRouter(prefix="/users")
+account_router = APIRouter(prefix="/accounts")
 logger = logging.getLogger(__name__)
 
 
-@user_router.post(
+@account_router.post(
     "/register",
     response_model=UserResponseModel,
     status_code=status.HTTP_201_CREATED,
-    tags=["User"],
+    tags=["Account"],
 )
 async def create_new_auth_user(
     request: Request,
@@ -101,7 +116,7 @@ async def create_new_auth_user(
     )
 
 
-@user_router.get(
+@account_router.get(
     "/getusers",
     response_model=AllUsersResponse,
     status_code=status.HTTP_200_OK,
@@ -154,11 +169,11 @@ async def get_auth_users(
     )
 
 
-@user_router.get(
+@account_router.get(
     "/@me",
     response_model=UserResponseModel,
     status_code=status.HTTP_200_OK,
-    tags=["User"],
+    tags=["Account"],
 )
 async def get_an_auth_user(
     user: User = Depends(user_service.get_current_user),
@@ -174,11 +189,11 @@ async def get_an_auth_user(
     )
 
 
-@user_router.patch(
+@account_router.patch(
     "/@me",
     response_model=UserUpdateResponseModel,
     status_code=status.HTTP_200_OK,
-    tags=["User"],
+    tags=["Account"],
 )
 async def patch_auth_user(
     data: UserUpdateSchema,
@@ -203,14 +218,15 @@ async def patch_auth_user(
     )
 
 
-@user_router.delete(
+@account_router.delete(
     "/@me",
     response_model=UserResponseModel,
     status_code=status.HTTP_200_OK,
     summary="Deletes a user",
-    tags=["User"],
+    tags=["Account"],
 )
 async def soft_delete_auth_user(
+    data: UserSelfDeleteRequest,
     user: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -232,7 +248,7 @@ async def soft_delete_auth_user(
     return user.to_dict()
 
 
-@user_router.delete(
+@account_router.delete(
     "/delete/{user_id}",
     response_model=UserResponseModel,
     status_code=status.HTTP_200_OK,
@@ -269,7 +285,7 @@ def soft_delete_auth_user(
     return user.to_dict()
 
 
-@user_router.delete(
+@account_router.delete(
     "/hard-delete",
     response_model=UserResponseModel,
     status_code=status.HTTP_200_OK,
@@ -332,3 +348,174 @@ async def hard_delete_auth_user(
     # send mail to deleted user if applicable
 
     return deleted_user_details
+
+
+@account_router.post(
+    "/reactivation-request", status_code=status.HTTP_200_OK, tags=["Account"]
+)
+def request_reactivation_link(
+    data: AccountReactivationRequest,
+    bgt: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Request a reactivation link for self account reactivation"""
+
+    user_obj = None
+
+    try:
+        user_obj = user_service.fetch(email=data.email, db=db)
+    except Exception:
+        pass
+
+    if user_obj:
+        if not user_obj.is_active:
+            reactivation_link, validity = user_service.create_account_reactivation_link(
+                user=user_obj
+            )
+            notification_service.send_account_reactivation_link(
+                user=user_obj,
+                reactivation_link=reactivation_link,
+                link_validity_days=validity,
+                bgt=bgt,
+            )
+
+    return JsonResponseDict(
+        message="If the account exists and is deactivated, you'll receive a reactivation link.",
+        status_code=status.HTTP_200_OK,
+    )
+
+
+@account_router.post(
+    "/@me/reactivate", status_code=status.HTTP_200_OK, tags=["Account"]
+)
+async def self_reactivate_user(
+    bgt: BackgroundTasks,
+    email: EmailStr = Query(..., description="user's account email"),
+    token: str = Query(..., description="user's activation token"),
+    db: Session = Depends(get_db),
+):
+    """
+    Deactivate an Auth user.
+    """
+
+    user = user_service.reactivate_user(db=db, email=email, token=token)
+    if user:
+        # notify user
+        notification_service.send_success_account_reactivation_mail(user=user, bgt=bgt)
+        # audit log
+        return JsonResponseDict(
+            message="user account activated", status_code=status.HTTP_200_OK
+        )
+
+
+@account_router.post(
+    "/activate/{user_id}", status_code=status.HTTP_200_OK, tags=["Account"]
+)
+async def admin_activate_user(
+    bgt: BackgroundTasks,
+    user_id: str = Path(..., description="ID of user to activate or reactivate"),
+    user: User = Depends(user_service.get_current_user),
+    db: Session = Depends(get_db),
+    moderator_superadmin: User = Depends(user_service.get_current_user),
+):
+    """
+    Activate an Auth user.
+    """
+
+    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
+        )
+
+    try:
+        user = user_service.admin_activate_user(db=db, user_id=user_id)
+
+        if user:
+            # notify user
+            notification_service.send_success_account_reactivation_mail(
+                user=user, bgt=bgt
+            )
+            # audit log
+            return JsonResponseDict(message="user has been activated.", status_code=200)
+
+    except HTTPException as exc:
+        return JsonResponseDict(
+            message="Failed to deactivate user",
+            error=f"{exc.detail}",
+            status_code=exc.status_code,
+        )
+
+
+@account_router.post(
+    "/@me/deactivate", status_code=status.HTTP_200_OK, tags=["Account"]
+)
+def self_deactivation(
+    schema: DeactivateUserSchema,
+    bgt: BackgroundTasks,
+    user: User = Depends(user_service.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """user route for self deactivation"""
+
+    reactivation_link = user_service.deactivate_user(db=db, user=user, schema=schema)
+
+    # notify user and include reactivation link
+    notification_service.send_account_deactivation_mail(
+        user=user, reactivation_link=reactivation_link, bgt=bgt
+    )
+
+    # audit log
+
+    return JsonResponseDict(
+        message="User account has been deactivated.",
+        status_code=status.HTTP_200_OK,
+    )
+
+
+@account_router.post(
+    "/deactivate/{user_id}", status_code=status.HTTP_200_OK, tags=["Account"]
+)
+def deactivate_a_user_auth_account(
+    schema: DeactivateUserSchema,
+    bgt: BackgroundTasks,
+    user_id: str = Path(..., description="ID of the user to deactivate"),
+    moderator_superadmin: User = Depends(user_service.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """ """
+
+    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
+        )
+
+    user = user_service.fetch_by_id(db=db, id=user_id)
+
+    reactivation_link = user_service.deactivate_user(db=db, user=user, schema=schema)
+
+    # notify user and include reactivation link
+    notification_service.send_account_deactivation_mail(
+        user=user, reactivation_link=reactivation_link, bgt=bgt
+    )
+
+    # audit log
+
+    return JsonResponseDict(
+        message=f"{user.email} account has been deactivated.",
+        status_code=status.HTTP_200_OK,
+    )
+
+
+@account_router.post("/restore", status_code=status.HTTP_200_OK, tags=["Account"])
+def restore_soft_deleted_account(
+    user_identifier: str = Query(
+        ...,
+        description="ID or email of the user to restore",
+        examples=["user@example.com", "068504f4-0475-740e-8000-fbf20e74b8b9"],
+    ),
+    user: User = Depends(user_service.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Restore a soft deleted user account"""
+
+    pass
