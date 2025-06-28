@@ -90,7 +90,7 @@ async def home(request: Request):
     """
 
     return {
-        "message": "Welcome to FastAPI Auth System by Pius",
+        "message": "Welcome to FastAPI Auth System!",
         "status_code": status.HTTP_200_OK,
         "data": {
             "author": {
