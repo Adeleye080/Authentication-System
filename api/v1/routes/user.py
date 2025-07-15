@@ -197,6 +197,7 @@ async def get_an_auth_user(
 )
 async def patch_auth_user(
     data: UserUpdateSchema,
+    bgt: BackgroundTasks,
     user: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -210,6 +211,9 @@ async def patch_auth_user(
             error=exc.detail,
             status_code=exc.status_code,
         )
+
+    # notify user of the update
+    notification_service.send_account_update_notification(user=user, bgt=bgt)
 
     return JsonResponseDict(
         message="user updated successfully",
@@ -395,7 +399,7 @@ async def self_reactivate_user(
     db: Session = Depends(get_db),
 ):
     """
-    Deactivate an Auth user.
+    Self reactivate account. Requires email input from user.
     """
 
     user = user_service.reactivate_user(db=db, email=email, token=token)
@@ -419,7 +423,7 @@ async def admin_activate_user(
     moderator_superadmin: User = Depends(user_service.get_current_user),
 ):
     """
-    Activate an Auth user.
+    [Moderator, Superadmin] Activate an Auth user.
     """
 
     if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
