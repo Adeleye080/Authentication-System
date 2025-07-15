@@ -369,7 +369,7 @@ async def refresh(
 
     device_info = await get_device_info(request)
 
-    curr_device_fprt = generate_device_fingerprint(device_info.get("user-agent"))
+    curr_device_fprt = generate_device_fingerprint(device_info.get("user_agent"))
 
     new_access_token, new_refresh_token = user_service.refresh_access_token(
         db,
