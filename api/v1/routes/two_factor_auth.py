@@ -9,7 +9,11 @@ from api.v1.services import (
 )
 from api.utils.json_response import JsonResponseDict
 from api.utils.responses import auth_response
-from api.utils.user_device_agent import get_client_ip, get_device_info
+from api.utils.user_device_agent import (
+    get_client_ip,
+    get_device_info,
+    generate_device_fingerprint,
+)
 from api.utils.user_phonenumber import get_user_phonenumber_from_user_service
 from api.utils.settings import settings
 from api.v1.models.user import User
@@ -192,7 +196,13 @@ async def verify_totp(
             )
 
         access_token = user_service.create_access_token(user_obj=user, db=db)
-        refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
+        refresh_token = user_service.create_refresh_token(
+            db=db,
+            user_id=user.id,
+            user_device_fingerprint=generate_device_fingerprint(
+                device_info.get("user_agent")
+            ),
+        )
 
         user.email  # load object attrs
         user.login_initiated = False
@@ -267,12 +277,20 @@ if settings.ALLOW_SMS_AUTH and settings.USER_SERVICE_PHONE_NUMBER_URL != "0":
         Sends OTP code to user via SMS to complete user login. \n
         Serves as a backup for Authenticator app.\n
         Not for Authenticator app generated OTP code.
+
+        **Note:** This service is strictly for auth and does not store user's phone number.
+        so user's phone number is gotten from the configured user service
         """
 
         if request_data.email:
             user = user_service.fetch(db=db, email=request_data.email)
 
         device_info = await get_device_info(request)
+
+        exc = HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service temporarily unavailable",
+        )
 
         # get user phone number
         try:
@@ -295,10 +313,10 @@ if settings.ALLOW_SMS_AUTH and settings.USER_SERVICE_PHONE_NUMBER_URL != "0":
                     user_agent=device_info.get("user_agent", "N/A"),
                 ),
             )
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Service temporarily unavailable",
-            )
+            raise exc
+
+        if not phone_number:
+            raise exc
 
         # generate OTP code, save it.
         otp_code = totp_service.generate_sms_otp_code(db=db, user_id=user.id)
@@ -382,7 +400,13 @@ if settings.ALLOW_SMS_AUTH and settings.USER_SERVICE_PHONE_NUMBER_URL != "0":
         totp_service.verify_sms_otp_code(db=db, code=data.otp, user_id=user_id)
 
         access_token = user_service.create_access_token(user_obj=user, db=db)
-        refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
+        refresh_token = user_service.create_refresh_token(
+            db=db,
+            user_id=user.id,
+            user_device_fingerprint=generate_device_fingerprint(
+                device_info.get("user_agent")
+            ),
+        )
 
         user.email  # load object attrs
         user.login_initiated = False
