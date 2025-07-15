@@ -110,8 +110,11 @@ class DevicesService:
         Delete a device
         """
         device = self.get(db=db, device_id=device_id)
-        db.delete(device)
-        db.commit()
+        try:
+            db.delete(device)
+            db.commit()
+        except Exception:
+            db.rollback()
         return
 
     def delete_all_device_by_user_id(self, db: Session, user_id):
