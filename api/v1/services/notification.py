@@ -226,3 +226,20 @@ class Notification:
                 ),
             },
         )
+
+    def send_account_update_notification(
+        self, user: User, bgt: BackgroundTasks
+    ) -> None:
+        """Notify users of changes they made on their account"""
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Account Updated",
+            template_name="account_updated_mail.html",
+            template_context={
+                "username": user.email,
+                "dashboardLink": settings.FRONTEND_DASHBOARD_URL.strip("/")
+                or settings.FRONTEND_HOME_URL.strip("/"),
+            },
+        )
