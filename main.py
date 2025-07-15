@@ -73,9 +73,16 @@ app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 email_templates = Jinja2Templates(directory="smtp/templates/html_mail_templates")
 
 
-@app.get("/", include_in_schema=False, status_code=status.HTTP_200_OK)
+@app.get("/", include_in_schema=False, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 def root(request: Request):
     return RedirectResponse(url=request.url_for("home"))
+
+
+@app.get(
+    "/docs", include_in_schema=False, status_code=status.HTTP_307_TEMPORARY_REDIRECT
+)
+def root(request: Request):
+    return RedirectResponse(url=f"{str(request.base_url).strip('/')}/documentation")
 
 
 @app.get(
@@ -132,6 +139,17 @@ async def http_exception(request: Request, exc: HTTPException):
     return JsonResponseDict(
         status_code=exc.status_code,
         message=exc.detail,
+        status="error",
+    )
+
+
+@app.exception_handler(404)
+async def http_exception(request: Request, exc: HTTPException):
+    """HTTP exception handler"""
+
+    return JsonResponseDict(
+        status_code=exc.status_code,
+        message=exc.detail or "Not Found",
         status="error",
     )
 
