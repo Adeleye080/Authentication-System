@@ -491,6 +491,8 @@ class AccessTokenData(BaseModel):
 
     id: str
     email: EmailStr = None
+    # Device fingerprint
+    dft: Optional[str] = None
 
 
 class DeactivateUserSchema(BaseModel):
