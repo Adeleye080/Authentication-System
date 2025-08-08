@@ -52,6 +52,7 @@ from api.v1.services import (
     devices_service,
     notification_service,
     geoip_service,
+    totp_service,
 )
 
 
@@ -101,11 +102,44 @@ async def login(
             message="Login initiated, Please provide OTP and your temporary token to complete login",
             status_code=status.HTTP_202_ACCEPTED,
             status="pending",
-            data={"requires_2fa": True, "temp_token": temp_token},
+            data={
+                "requires_2fa": True,
+                "temp_token": temp_token,
+                "next_action_url": request.url_for("verify_sms_otp_code"),
+            },
         )
 
     # save user device info
     device_info = await get_device_info(request)
+
+    # check if device is familiar, else trigger email otp verification
+    if not devices_service.is_device_familiar(
+        db=db, user_id=user.id, device_info=device_info
+    ):
+        # if user has not logged in before, skip email verification
+        if user.last_login is None:
+            devices_service.create_with_bgt(
+                db=db, owner=user, device_info=device_info, bgt=bgt
+            )
+
+        else:
+            # generate OTP code
+            otp_code = totp_service.generate_email_otp_code(db=db, user_id=user.id)
+            # send email verification for new device
+            notification_service.send_email_otp_verification_code(
+                user=user, otp_code=otp_code, bgt=bgt
+            )
+            return JsonResponseDict(
+                message="New device detected, please verify your email to continue",
+                status_code=status.HTTP_202_ACCEPTED,
+                status="pending",
+                data={
+                    "requires_email_verification": True,
+                    "next_action_url": request.url_for("verify_email_code"),
+                    "temp_token": "some-tokens",
+                },
+            )
+
     if device_info:
         devices_service.create_with_bgt(
             db=db, owner=user, device_info=device_info, bgt=bgt
@@ -703,3 +737,15 @@ async def resend_verification(
         message=f"verifcation email has been sent to {user.email}",
         status_code=200,
     )
+
+
+@auth_router.post(
+    "/verify-email-code",
+    summary="Validate email verification code",
+    status_code=status.HTTP_200_OK,
+)
+async def verify_email_code(request: Request, code: int):
+    """
+    Verify code for risk-based/adaptive authentication
+    """
+    pass
