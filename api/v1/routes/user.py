@@ -25,6 +25,7 @@ from api.v1.schemas.user import (
     AccountReactivationRequest,
     UserSelfDeleteRequest,
     DeactivateUserSchema,
+    AccountRestoreRequest,
 )
 from api.v1.schemas.audit_logs import (
     AuditLogCreate,
@@ -237,10 +238,17 @@ async def soft_delete_auth_user(
     """
     CAUTION!!
 
-    Self delete user from the system
+    Self delete account from the system
     """
 
     try:
+        # verify password before deleting
+        if not user_service.verify_password(user=user, password=data.password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect password",
+            )
+        # soft delete account
         user = user_service.delete(db=db, user_id=user.id)
     except HTTPException as exc:
         return JsonResponseDict(
@@ -259,7 +267,7 @@ async def soft_delete_auth_user(
     summary="Deletes a user in the system",
     tags=["Superadmin", "Moderator"],
 )
-def soft_delete_auth_user(
+async def soft_delete_auth_user(
     user_id: UUID,
     db: Session = Depends(get_db),
     user: User = Depends(user_service.get_current_user),
@@ -357,7 +365,7 @@ async def hard_delete_auth_user(
 @account_router.post(
     "/reactivation-request", status_code=status.HTTP_200_OK, tags=["Account"]
 )
-def request_reactivation_link(
+async def request_reactivation_link(
     data: AccountReactivationRequest,
     bgt: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -479,7 +487,7 @@ def self_deactivation(
 @account_router.post(
     "/deactivate/{user_id}", status_code=status.HTTP_200_OK, tags=["Account"]
 )
-def deactivate_a_user_auth_account(
+async def deactivate_a_user_auth_account(
     schema: DeactivateUserSchema,
     bgt: BackgroundTasks,
     user_id: str = Path(..., description="ID of the user to deactivate"),
@@ -511,15 +519,56 @@ def deactivate_a_user_auth_account(
 
 
 @account_router.post("/restore", status_code=status.HTTP_200_OK, tags=["Account"])
-def restore_soft_deleted_account(
-    user_identifier: str = Query(
-        ...,
-        description="ID or email of the user to restore",
-        examples=["user@example.com", "068504f4-0475-740e-8000-fbf20e74b8b9"],
-    ),
-    user: User = Depends(user_service.get_current_user),
+async def restore_soft_deleted_account(
+    request: Request,
+    bgt: BackgroundTasks,
+    data: AccountRestoreRequest,
+    moderator_superadmin: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Restore a soft deleted user account"""
+    """
+    Restore a soft deleted user account
 
-    pass
+    The endpoint validates the email address domain (if email is used).
+    """
+
+    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
+        )
+
+    restored_user = user_service.restore_soft_deleted_user(
+        db=db, user_identifier=data.user_identifier
+    )
+
+    # log user device info
+    device_info = await get_device_info(request)
+
+    if restored_user:
+        # notify user
+        notification_service.send_account_restore_notification(
+            user=restored_user, bgt=bgt
+        )
+
+        # audit log
+        audit_log_service.log(
+            db=db,
+            background_task=bgt,
+            schema=AuditLogCreate(
+                user_id=moderator_superadmin.id,
+                event=AuditLogEventEnum.RESTORE_ACCOUNT,
+                description=f"Moderator/Superadmin ({moderator_superadmin.id} - {moderator_superadmin.email}) restored user ({restored_user.email}) account.",
+                details=restored_user.to_dict(hide_sensitive_data=False),
+                status=AuditLogStatuses.SUCCESS,
+                ip_address="Not Captured",
+                user_agent="Not Captured",
+            ),
+        )
+        return JsonResponseDict(
+            message="User account has been restored.", status_code=200
+        )
+
+    return JsonResponseDict(
+        message="Failed to restore user account.",
+        status_code=status.HTTP_404_NOT_FOUND,
+    )
