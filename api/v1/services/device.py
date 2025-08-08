@@ -153,3 +153,21 @@ class DevicesService:
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown Device"
             )
         return
+
+    def is_device_familiar(self, db: Session, user_id: str, device_info: dict) -> bool:
+        """
+        Check if a device is familiar to the user
+        """
+        device_fingerprint = generate_device_fingerprint(
+            device_info.get("user_agent", "unknown")
+        )
+
+        device = (
+            db.query(Device)
+            .filter(
+                Device.user_id == user_id,
+                Device.device_fingerprint == device_fingerprint,
+            )
+            .first()
+        )
+        return device is not None
