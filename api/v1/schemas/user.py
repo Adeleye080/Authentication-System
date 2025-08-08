@@ -536,3 +536,36 @@ class UserSelfDeleteRequest(BaseModel):
     """schema for self delete request"""
 
     pasword: str = Field(..., description="user's account password")
+
+
+class AccountRestoreRequest(BaseModel):
+    """Schema for restoring a soft deleted user account"""
+
+    user_identifier: str = Field(
+        ...,
+        description="ID or email of the user account to restore",
+        examples=["user@auth-system.com", "123e4567-e89b-12d3-a456-426614174000"],
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_user_identifier(cls, values: dict):
+        """
+        Validates user identifier.
+        """
+        user_identifier = values.get("user_identifier")
+
+        if not user_identifier:
+            raise ValueError("User identifier is required")
+
+        # Check if the identifier is a valid UUID
+        if re.match(UUID_REGEX, user_identifier):
+            return values
+
+        # Validate email format
+        try:
+            validate_email(user_identifier, check_deliverability=True)
+        except EmailNotValidError as exc:
+            raise ValueError(f"Invalid email: {exc}") from exc
+
+        return values
