@@ -344,7 +344,7 @@ if settings.ALLOW_SMS_AUTH and settings.USER_SERVICE_PHONE_NUMBER_URL != "0":
 
     @two_factor_auth_router.post(
         "/sms/verify-otp",
-        summary="Verify OTP code sent to user via email or SMS",
+        summary="Verify OTP code sent to user via SMS",
         status_code=status.HTTP_200_OK,
     )
     async def verify_sms_otp_code(
