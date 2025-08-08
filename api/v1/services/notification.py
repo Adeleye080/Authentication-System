@@ -166,7 +166,7 @@ class Notification:
         bgt.add_task(
             func=send_sms_message,
             phone_number=number,
-            message=f"Your OTP code is {otp_code}\n\nPlease do not share this code with anyone.",
+            message=f"Your OTP code is {otp_code}\n\nPlease do not share this code with anyone.\nThis code is valid for 10 minutes.",
         )
 
     def send_account_reactivation_link(
@@ -241,5 +241,38 @@ class Notification:
                 "username": user.email,
                 "dashboardLink": settings.FRONTEND_DASHBOARD_URL.strip("/")
                 or settings.FRONTEND_HOME_URL.strip("/"),
+            },
+        )
+
+    def send_account_restore_notification(
+        self, user: User, bgt: BackgroundTasks
+    ) -> None:
+        """Notify users of successful account restoration"""
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Account Restored",
+            template_name="account_restored_mail.html",
+            template_context={
+                "username": user.email,
+                "loginLink": settings.FRONTEND_DASHBOARD_URL.strip("/")
+                or settings.FRONTEND_HOME_URL.strip("/"),
+            },
+        )
+
+    def send_email_otp_verification_code(
+        self, user: User, otp_code: int, bgt: BackgroundTasks
+    ) -> None:
+        """Send email OTP verification code to user"""
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Your OTP Verification Code",
+            template_name="email_otp_verification_template.html",
+            template_context={
+                "username": user.email,
+                "code": otp_code,
             },
         )
