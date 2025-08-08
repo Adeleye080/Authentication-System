@@ -1044,3 +1044,38 @@ class UserService(Service):
         if not attributes:
             return {}
         return attributes
+
+    def restore_soft_deleted_user(self, db: Session, user_identifier: str) -> User:
+        """
+        Restore a soft deleted user account
+        """
+
+        if "@" in user_identifier:
+            # If the identifier is an email, fetch user by email
+            user = db.query(User).filter(User.email == user_identifier).first()
+        elif "-" in user_identifier:
+            # If the identifier is an ID, fetch user by ID
+            user = db.query(User).filter(User.id == user_identifier).first()
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid user identifier format. Use email or ID.",
+            )
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+            )
+
+        if not user.is_deleted:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="User is not deleted",
+            )
+
+        user.is_deleted = False
+        user.is_active = True
+        db.commit()
+        db.refresh(user)
+
+        return user
