@@ -18,3 +18,25 @@ def check_model_existence(db: Session, model, id: str = None):
         raise HTTPException(status_code=404, detail=f"{model.__name__} does not exist")
 
     return obj
+
+
+def is_email(email: str):
+    """Checks if a string is a valid email format"""
+
+    try:
+        EmailStr._validate(email)
+        return True
+    except ValueError:
+        return False
+
+
+def is_uuid(value: str) -> bool:
+    """Checks if a string is a valid UUID format"""
+
+    try:
+        from uuid import UUID
+
+        UUID(value, version=4)
+        return True
+    except ValueError:
+        return False
