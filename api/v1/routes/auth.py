@@ -16,7 +16,7 @@ from fastapi import (
     Body,
 )
 
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 import logging
 from sqlalchemy.orm import Session
 from db.database import get_db
@@ -31,6 +31,7 @@ from api.v1.schemas.user import (
     MagicLinkToken,
     MagicLinkRequest,
 )
+from api.v1.schemas.auth import VerifyEmailOTPRequest
 from api.v1.schemas.audit_logs import (
     AuditLogCreate,
     AuditLogEventEnum,
@@ -54,6 +55,7 @@ from api.v1.services import (
     geoip_service,
     totp_service,
 )
+from datetime import datetime, timezone
 
 
 auth_router = APIRouter(tags=["Auth"])
@@ -123,8 +125,15 @@ async def login(
             )
 
         else:
+            from api.utils.encrypters_and_decrypters import (
+                generate_email_otp_login_temp_token,
+            )
+
             # generate OTP code
             otp_code = totp_service.generate_email_otp_code(db=db, user_id=user.id)
+            email_risk_based_auth_otp_temp_token = generate_email_otp_login_temp_token(
+                user_id=user.id, validity=6
+            )
             # send email verification for new device
             notification_service.send_email_otp_verification_code(
                 user=user, otp_code=otp_code, bgt=bgt
@@ -136,7 +145,7 @@ async def login(
                 data={
                     "requires_email_verification": True,
                     "next_action_url": request.url_for("verify_email_code"),
-                    "temp_token": "some-tokens",
+                    "temp_token": email_risk_based_auth_otp_temp_token,
                 },
             )
 
@@ -741,11 +750,114 @@ async def resend_verification(
 
 @auth_router.post(
     "/verify-email-code",
-    summary="Validate email verification code",
+    summary="Validate login email verification code",
     status_code=status.HTTP_200_OK,
 )
-async def verify_email_code(request: Request, code: int):
+async def verify_email_code(
+    request: Request,
+    req_data: VerifyEmailOTPRequest,
+    bgt: BackgroundTasks,
+    db: Session = Depends(get_db),
+    geoip_info=Depends(geoip_service.blacklisted_country_dependency_check),
+):
     """
-    Verify code for risk-based/adaptive authentication
+    Verify OTP code received by email for risk-based/adaptive authentication
     """
-    pass
+    from api.utils.encrypters_and_decrypters import decrypt_email_otp_login_temp_token
+
+    # Decrypt the temporary token
+    user_id = decrypt_email_otp_login_temp_token(req_data.temp_token)
+
+    # Verify the OTP code
+    is_valid_code = totp_service.verify_email_otp_code(
+        db=db, code=str(req_data.otp), user_identifier=user_id
+    )
+
+    if not is_valid_code:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OTP code"
+        )
+
+    # Now that the OTP is valid, proceed with login
+    user = user_service.fetch_by_id(db=db, id=user_id)
+
+    # get device info
+    device_info = await get_device_info(request)
+
+    access_token = user_service.create_access_token(user_obj=user, db=db)
+    user_refresh_token = user_service.create_refresh_token(
+        db=db,
+        user_id=user.id,
+        user_device_fingerprint=generate_device_fingerprint(
+            device_info.get("user_agent")
+        ),
+    )
+
+    # notify user of new device if device is not familiar
+    if not devices_service.is_device_familiar(
+        db=db, user_id=user.id, device_info=device_info
+    ):
+        login_time = datetime.now(tz=timezone.utc)
+        login_device_name = device_info.get("device_name", "N/A")
+        login_ip_address = device_info.get("ip_address", "N/A")
+        login_location = f"{geoip_info.city}, {geoip_info.country_name}" or "Unknown"
+        notification_service.send_new_device_login_alert(
+            user=user,
+            login_time=login_time,
+            login_location=login_location,
+            login_device_name=login_device_name,
+            login_ip_address=login_ip_address,
+            bgt=bgt,
+        )
+
+    # add the new device to user account
+    # user can remove or report new device if they didn't add it
+    # since alert is sent to their email
+    devices_service.create_with_bgt(db=db, owner=user, device_info=device_info, bgt=bgt)
+
+    user.email  # load object attrs
+
+    response = auth_response(
+        status="success",
+        status_code=200,
+        message="Login was successful",
+        user_data=user.to_dict(),
+        refresh_token=user_refresh_token,
+        access_token=access_token,
+    )
+
+    # set cookies
+    if settings.ALLOW_AUTH_COOKIES:
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            secure=settings.AUTH_SECURE_COOKIES,
+            samesite=settings.AUTH_SAME_SITE,
+            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        )
+
+        response.set_cookie(
+            key="refresh_token",
+            value=user_refresh_token,
+            httponly=True,
+            secure=settings.AUTH_SECURE_COOKIES,
+            samesite=settings.AUTH_SAME_SITE,
+            expires=settings.JWT_REFRESH_EXPIRY,
+        )
+
+    # audit log
+    audit_log_service.log(
+        db=db,
+        background_task=bgt,
+        schema=AuditLogCreate(
+            user_id=user.id,
+            event=AuditLogEventEnum.LOGIN,
+            description="user logged in with password and email OTP for risk-based auth.",
+            status=AuditLogStatuses.SUCCESS,
+            ip_address=device_info.get("ip_address", "N/A"),
+            user_agent=device_info.get("user_agent", "N/A"),
+        ),
+    )
+
+    return response
