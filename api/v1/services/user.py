@@ -44,7 +44,7 @@ class UserService(Service):
     def __init__(self):
         """Initializes the user service class"""
 
-        self.dft_string = "OAuth"
+        self.dft_string = "OAuth"  # default device fingerprint string
 
     def create(self, db: Session, schema: UserCreate):
         """Creates a Auth new user"""
@@ -1077,5 +1077,23 @@ class UserService(Service):
         user.is_active = True
         db.commit()
         db.refresh(user)
+
+        return user
+
+    def ban_user(self, db: Session, user_id: str, reason: str) -> User:
+        """Ban user auth account"""
+
+        user = self.fetch_by_id(db=db, id=user_id)
+        user.is_banned = True
+        user.save(db=db)
+
+        return user
+
+    def unban_user(self, db: Session, user_id: str, reason: str) -> User:
+        """Unban user auth account"""
+
+        user = self.fetch_by_id(db=db, id=user_id)
+        user.is_banned = False
+        user.save(db=db)
 
         return user
