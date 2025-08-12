@@ -569,3 +569,100 @@ class AccountRestoreRequest(BaseModel):
             raise ValueError(f"Invalid email: {exc}") from exc
 
         return values
+
+
+class AccountBanRequest(BaseModel):
+    """Schema for user account ban"""
+
+    user_identifier: str = Field(
+        ...,
+        description="User Account ID or Email",
+        examples=["user@auth-system.com", "123e4567-e89b-12d3-a456-426614174000"],
+    )
+    reason: str = Field(
+        ...,
+        description="Reason for banning user",
+        examples=["Repeated violation of company policies."],
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_user_identifier_and_reason(cls, values: dict):
+        """
+        Validates user identifier.
+        """
+        user_identifier = values.get("user_identifier")
+        reason = values.get("reason")
+
+        # validate reason text
+        if len(reason.strip()) < 15:
+            raise ValueError(
+                "Your reson for banning cannot be less than 15 characters!"
+            )
+
+        if not user_identifier:
+            raise ValueError("User identifier is required")
+
+        # Check if the identifier is a valid UUID
+        if re.match(UUID_REGEX, user_identifier):
+            return values
+        else:
+            # Validate email format
+            try:
+                validate_email(user_identifier, check_deliverability=True)
+            except EmailNotValidError as exc:
+                raise ValueError(f"Invalid email: {exc}") from exc
+
+        return values
+
+
+class AccountUnbanRequest(BaseModel):
+    """Schema for user account unban"""
+
+    user_identifier: str = Field(
+        ...,
+        description="User Account ID or Email",
+        examples=["user@auth-system.com", "123e4567-e89b-12d3-a456-426614174000"],
+    )
+    reason: str = Field(
+        ...,
+        description="Reason for lifting ban on user account",
+        examples=["Appeal accepted by appropriate department"],
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_user_identifier_and_reason(cls, values: dict):
+        """
+        Validates user identifier.
+        """
+        user_identifier = values.get("user_identifier")
+        reason = values.get("reason")
+
+        # validate reason text
+        if len(reason.strip()) < 15:
+            raise ValueError(
+                "Your reson for lifting ban cannot be less than 15 characters!"
+            )
+
+        if not user_identifier:
+            raise ValueError("User identifier is required")
+
+        # Check if the identifier is a valid UUID
+        if re.match(UUID_REGEX, user_identifier):
+            return values
+        else:
+            # Validate email format
+            try:
+                validate_email(user_identifier, check_deliverability=True)
+            except EmailNotValidError as exc:
+                raise ValueError(f"Invalid email: {exc}") from exc
+
+        return values
+
+
+class BanHistoryStatusEnum(PyEnum):
+    """Ban history statuses"""
+
+    LIFTED = "lifted"
+    BANNED = "banned"
