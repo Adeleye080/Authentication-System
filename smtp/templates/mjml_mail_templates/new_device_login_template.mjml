@@ -39,7 +39,7 @@
         <mj-text padding-bottom="10px">
           We detected a new login to your account from a device we don't recognize.
         </mj-text>
-        <mj-table padding-bottom="20px">
+        <mj-table padding-bottom="20px" font-size="14px" color="#333333">
           <tr>
             <td style="padding: 5px 0; font-weight: bold;">Time:</td>
             <td style="padding: 5px 0;">{{loginTime}}</td>
@@ -58,13 +58,14 @@
           </tr>
         </mj-table>
         <mj-text padding-bottom="20px">
-          If this was you, you can ignore this message. If you don't recognize this activity, please secure your account immediately:
+          If this was you, you can ignore this message. If you don't recognize this activity, please secure your account immediately and unlink the device from your account.
         </mj-text>
         <mj-button background-color="#D32F2F" color="white" font-weight="500" border-radius="4px" href={{securityPageLink}}>
           Secure Your Account
         </mj-button>
-        <mj-text font-size="14px" color="#666666" padding-top="20px">
+        <mj-text font-size="13px" color="#666666" padding-top="20px">
           For added security, consider enabling two-factor authentication in your account settings.
+          <br />Don't know what to do? contact our support team.
         </mj-text>
       </mj-column>
     </mj-section>

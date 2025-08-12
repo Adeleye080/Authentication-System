@@ -16,7 +16,7 @@ from fastapi import (
     Body,
 )
 
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 import logging
 from sqlalchemy.orm import Session
 from db.database import get_db
@@ -31,6 +31,7 @@ from api.v1.schemas.user import (
     MagicLinkToken,
     MagicLinkRequest,
 )
+from api.v1.schemas.auth import VerifyEmailOTPRequest
 from api.v1.schemas.audit_logs import (
     AuditLogCreate,
     AuditLogEventEnum,
@@ -40,7 +41,11 @@ from api.v1.schemas.user import GeneralResponse, RefreshTokenRequest
 from api.utils.json_response import JsonResponseDict
 from api.utils.settings import settings
 from api.utils.responses import auth_response
-from api.utils.user_device_agent import get_device_info, get_client_ip
+from api.utils.user_device_agent import (
+    get_device_info,
+    get_client_ip,
+    generate_device_fingerprint,
+)
 from api.v1.models.user import User
 from api.v1.services import (
     user_service,
@@ -48,7 +53,9 @@ from api.v1.services import (
     devices_service,
     notification_service,
     geoip_service,
+    totp_service,
 )
+from datetime import datetime, timezone
 
 
 auth_router = APIRouter(tags=["Auth"])
@@ -97,13 +104,66 @@ async def login(
             message="Login initiated, Please provide OTP and your temporary token to complete login",
             status_code=status.HTTP_202_ACCEPTED,
             status="pending",
-            data={"requires_2fa": True, "temp_token": temp_token},
+            data={
+                "requires_2fa": True,
+                "temp_token": temp_token,
+                "next_action_url": request.url_for("verify_sms_otp_code"),
+            },
+        )
+
+    # save user device info
+    device_info = await get_device_info(request)
+
+    # check if device is familiar, else trigger email otp verification
+    if not devices_service.is_device_familiar(
+        db=db, user_id=user.id, device_info=device_info
+    ):
+        # if user has not logged in before, skip email verification
+        if user.last_login is None:
+            devices_service.create_with_bgt(
+                db=db, owner=user, device_info=device_info, bgt=bgt
+            )
+
+        else:
+            from api.utils.encrypters_and_decrypters import (
+                generate_email_otp_login_temp_token,
+            )
+
+            # generate OTP code
+            otp_code = totp_service.generate_email_otp_code(db=db, user_id=user.id)
+            email_risk_based_auth_otp_temp_token = generate_email_otp_login_temp_token(
+                user_id=user.id, validity=6
+            )
+            # send email verification for new device
+            notification_service.send_email_otp_verification_code(
+                user=user, otp_code=otp_code, bgt=bgt
+            )
+            return JsonResponseDict(
+                message="New device detected, please verify your email to continue",
+                status_code=status.HTTP_202_ACCEPTED,
+                status="pending",
+                data={
+                    "requires_email_verification": True,
+                    "next_action_url": request.url_for("verify_email_code"),
+                    "temp_token": email_risk_based_auth_otp_temp_token,
+                },
+            )
+
+    if device_info:
+        devices_service.create_with_bgt(
+            db=db, owner=user, device_info=device_info, bgt=bgt
         )
 
     try:
         # generate user tokens
         user_access_token = user_service.create_access_token(user_obj=user, db=db)
-        user_refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
+        user_refresh_token = user_service.create_refresh_token(
+            db=db,
+            user_id=user.id,
+            user_device_fingerprint=generate_device_fingerprint(
+                device_info.get("user_agent")
+            ),
+        )
 
     except HTTPException as exc:
         return JsonResponseDict(
@@ -113,13 +173,6 @@ async def login(
         )
 
     user.email  # load object attrs
-
-    # save user device info
-    device_info = await get_device_info(request)
-    if device_info:
-        devices_service.create_with_bgt(
-            db=db, owner=user, device_info=device_info, bgt=bgt
-        )
 
     response = auth_response(
         status="success",
@@ -249,18 +302,24 @@ async def magic_link_login(
     """verifies magic link token and logs user in"""
 
     user = user_service.authenticate_user_with_magic_link(db, schema.token)
-    # generate user tokens
-    user_access_token = user_service.create_access_token(user_obj=user, db=db)
-    user_refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
-
-    user.email  # load the user object attributes.
-
     # save user device info (if new device)
     device_info = await get_device_info(request)
     if device_info:
         devices_service.create_with_bgt(
             db=db, owner=user, device_info=device_info, bgt=bgt
         )
+
+    # generate user tokens
+    user_access_token = user_service.create_access_token(user_obj=user, db=db)
+    user_refresh_token = user_service.create_refresh_token(
+        db=db,
+        user_id=user.id,
+        user_device_fingerprint=generate_device_fingerprint(
+            device_info.get("user_agent")
+        ),
+    )
+
+    user.email  # load the user object attributes.
 
     response = auth_response(
         status="success",
@@ -351,11 +410,15 @@ async def refresh(
 ):
     """Refreshes user token"""
 
-    new_access_token, new_refresh_token = user_service.refresh_access_token(
-        db, refresh_token_schema.refresh_token
-    )
+    device_info = await get_device_info(request)
 
-    # perform other logic such as setting cookies
+    curr_device_fprt = generate_device_fingerprint(device_info.get("user_agent"))
+
+    new_access_token, new_refresh_token = user_service.refresh_access_token(
+        db,
+        refresh_token_schema.refresh_token,
+        current_device_fingerprint=curr_device_fprt,
+    )
 
     response = JsonResponseDict(
         message="Token refreshed",
@@ -372,7 +435,6 @@ async def refresh(
         refresh_token=refresh_token_schema.refresh_token, db=db
     )
     # user device info
-    device_info = await get_device_info(request)
     if device_info:
         devices_service.create_with_bgt(
             db=db, owner=user, device_info=device_info, bgt=bgt
@@ -391,6 +453,26 @@ async def refresh(
             user_agent=device_info.get("user_agent"),
         ),
     )
+
+    # perform other logic such as setting cookies
+    if settings.ALLOW_AUTH_COOKIES:
+        response.set_cookie(
+            key="access_token",
+            value=new_access_token,
+            httponly=True,
+            secure=settings.AUTH_SECURE_COOKIES,
+            samesite=settings.AUTH_SAME_SITE,
+            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        )
+
+        response.set_cookie(
+            key="refresh_token",
+            value=new_refresh_token,
+            httponly=True,
+            secure=settings.AUTH_SECURE_COOKIES,
+            samesite=settings.AUTH_SAME_SITE,
+            expires=settings.JWT_REFRESH_EXPIRY,
+        )
 
     return response
 
@@ -448,16 +530,24 @@ async def reset_password(
 
     # Check user status
     user_service.perform_user_check(user=user)
+
+    device_info = await get_device_info(request)
+
     # change(reset) user password
     access_token, refresh_token = user_service.change_password(
-        new_password=data.new_password, user=user, db=db, mode="reset"
+        new_password=data.new_password,
+        user=user,
+        db=db,
+        mode="reset",
+        current_device_fingerprint=generate_device_fingerprint(
+            device_info.get("user_agent")
+        ),
     )
 
     # send notification to user
     notification_service.send_success_password_reset_or_changed_mail(user=user, bgt=bgt)
 
     # loging the event in audit logs
-    device_info = await get_device_info(request)
     audit_log_service.log(
         db=db,
         background_task=bgt,
@@ -502,16 +592,22 @@ async def change_password(
             detail="User not authenticated",
         )
 
+    device_info = await get_device_info(request)
+    dft = generate_device_fingerprint(device_info.get("user_agent"))
+
     # change user password
     access_token, refresh_token = user_service.change_password(
-        new_password=data.new_password, old_password=data.old_password, user=user, db=db
+        new_password=data.new_password,
+        old_password=data.old_password,
+        user=user,
+        db=db,
+        current_device_fingerprint=dft,
     )
 
     # send notification to user
     notification_service.send_success_password_reset_or_changed_mail(user=user, bgt=bgt)
 
     # loging the event in audit logs
-    device_info = await get_device_info(request)
     audit_log_service.log(
         db=db,
         background_task=bgt,
@@ -650,3 +746,118 @@ async def resend_verification(
         message=f"verifcation email has been sent to {user.email}",
         status_code=200,
     )
+
+
+@auth_router.post(
+    "/verify-email-code",
+    summary="Validate login email verification code",
+    status_code=status.HTTP_200_OK,
+)
+async def verify_email_code(
+    request: Request,
+    req_data: VerifyEmailOTPRequest,
+    bgt: BackgroundTasks,
+    db: Session = Depends(get_db),
+    geoip_info=Depends(geoip_service.blacklisted_country_dependency_check),
+):
+    """
+    Verify OTP code received by email for risk-based/adaptive authentication
+    """
+    from api.utils.encrypters_and_decrypters import decrypt_email_otp_login_temp_token
+
+    # Decrypt the temporary token
+    user_id = decrypt_email_otp_login_temp_token(req_data.temp_token)
+
+    # Verify the OTP code
+    is_valid_code = totp_service.verify_email_otp_code(
+        db=db, code=str(req_data.otp), user_identifier=user_id
+    )
+
+    if not is_valid_code:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OTP code"
+        )
+
+    # Now that the OTP is valid, proceed with login
+    user = user_service.fetch_by_id(db=db, id=user_id)
+
+    # get device info
+    device_info = await get_device_info(request)
+
+    access_token = user_service.create_access_token(user_obj=user, db=db)
+    user_refresh_token = user_service.create_refresh_token(
+        db=db,
+        user_id=user.id,
+        user_device_fingerprint=generate_device_fingerprint(
+            device_info.get("user_agent")
+        ),
+    )
+
+    # notify user of new device if device is not familiar
+    if not devices_service.is_device_familiar(
+        db=db, user_id=user.id, device_info=device_info
+    ):
+        login_time = datetime.now(tz=timezone.utc)
+        login_device_name = device_info.get("device_name", "N/A")
+        login_ip_address = device_info.get("ip_address", "N/A")
+        login_location = f"{geoip_info.city}, {geoip_info.country_name}" or "Unknown"
+        notification_service.send_new_device_login_alert(
+            user=user,
+            login_time=login_time,
+            login_location=login_location,
+            login_device_name=login_device_name,
+            login_ip_address=login_ip_address,
+            bgt=bgt,
+        )
+
+    # add the new device to user account
+    # user can remove or report new device if they didn't add it
+    # since alert is sent to their email
+    devices_service.create_with_bgt(db=db, owner=user, device_info=device_info, bgt=bgt)
+
+    user.email  # load object attrs
+
+    response = auth_response(
+        status="success",
+        status_code=200,
+        message="Login was successful",
+        user_data=user.to_dict(),
+        refresh_token=user_refresh_token,
+        access_token=access_token,
+    )
+
+    # set cookies
+    if settings.ALLOW_AUTH_COOKIES:
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            secure=settings.AUTH_SECURE_COOKIES,
+            samesite=settings.AUTH_SAME_SITE,
+            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        )
+
+        response.set_cookie(
+            key="refresh_token",
+            value=user_refresh_token,
+            httponly=True,
+            secure=settings.AUTH_SECURE_COOKIES,
+            samesite=settings.AUTH_SAME_SITE,
+            expires=settings.JWT_REFRESH_EXPIRY,
+        )
+
+    # audit log
+    audit_log_service.log(
+        db=db,
+        background_task=bgt,
+        schema=AuditLogCreate(
+            user_id=user.id,
+            event=AuditLogEventEnum.LOGIN,
+            description="user logged in with password and email OTP for risk-based auth.",
+            status=AuditLogStatuses.SUCCESS,
+            ip_address=device_info.get("ip_address", "N/A"),
+            user_agent=device_info.get("user_agent", "N/A"),
+        ),
+    )
+
+    return response

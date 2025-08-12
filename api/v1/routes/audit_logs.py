@@ -32,9 +32,7 @@ def fetch_all_audit_logs(
     """Fetches all audit logs"""
 
     if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
-        )
+        raise HTTPException(status_code=401, detail="Not enough permissions.")
 
     page = max(page, 1)
     per_page = max(per_page, 1)

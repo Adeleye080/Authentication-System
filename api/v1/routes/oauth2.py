@@ -136,7 +136,9 @@ async def authorize(
         user = user_obj
 
     user_access_token = user_service.create_access_token(db=db, user_obj=user)
-    user_refresh_token = user_service.create_refresh_token(db=db, user_id=user.id)
+    user_refresh_token = user_service.create_refresh_token(
+        db=db, user_id=user.id, by_oauth=True
+    )
     user.last_login = dt.datetime.now(dt.timezone.utc)
 
     if provider == "github":

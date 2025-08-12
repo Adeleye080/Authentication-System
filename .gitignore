@@ -13,6 +13,7 @@ pwp*
 .gitignore
 trashbin/
 *.mmdb
+app_logs/
 *.gz
 GeoLite2-*
 .idea/

@@ -46,14 +46,14 @@
           Hello {{username}},
         </mj-text>
         <mj-text padding-bottom="20px">
-          Here is your two-factor authentication code:
+          Here is your verification code:
         </mj-text>
 
-        <mj-text css-class="code" align="center" padding-bottom="20px">
-          {{" ".join(str(code)) }}
+        <mj-text css-class="code" align="center" padding-bottom="20px" font-size="30px">
+          {{" ".join(code)}}
         </mj-text>
         <mj-text padding-bottom="10px">
-          This code will expire in 10 minutes.
+          This code will expire in 5 minutes.
         </mj-text>
         <mj-text padding-bottom="20px">
           If you did not request this code, please secure your account immediately as someone may be attempting to access it.

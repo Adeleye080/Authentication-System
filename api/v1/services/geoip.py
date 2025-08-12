@@ -293,7 +293,7 @@ class GeoIPService:
                         if city_response.subdivisions
                         else "N/A"
                     ),
-                    city=city_response.city.name or "",
+                    city=city_response.city.name or "N/A",
                     timezone=city_response.location.time_zone or "N/A",
                     continent_code=city_response.continent.code or "N/A",
                     continent_name=city_response.continent.name or "N/A",
@@ -385,4 +385,4 @@ class GeoIPService:
                 detail=f"Access from your country ({result.country_code}) is restricted due to policy. If you believe this is an error, please contact support.",
             )
 
-        return
+        return result

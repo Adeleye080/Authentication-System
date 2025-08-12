@@ -106,11 +106,14 @@ class Settings(BaseSettings):
         "FRONTEND_PASSWORD_RESET_URL",
         default=f"{FRONTEND_HOME_URL.strip('/')}/reset-password",
     )
+    FRONTEND_ACOUNT_REACTIVATION_URL: str = config(
+        "FRONTEND_ACOUNT_REACTIVATION_URL", default="0", cast=str
+    )
 
     ENCRYPTER_SECRET_KEY: str = config(
         "ENCRYPTER_SECRET_KEY",
         cast=str,
-        # generated using Fernet.generate_key()
+        # generated using Fernet.generate_key(). please change the default one below
         default="Krq0Q8LWlYYv7famIjZ1k2gyzRZqEnKUqeEz2JX9CaQ=",
     )
 
