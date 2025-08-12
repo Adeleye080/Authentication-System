@@ -1,8 +1,7 @@
 from cryptography.fernet import Fernet
-from decouple import config
-import pyotp
 from pydantic import EmailStr
 from api.utils.settings import settings
+from api.utils.validators import is_email, is_uuid
 from fastapi import HTTPException, status
 from datetime import datetime, timedelta, timezone
 import json
@@ -51,11 +50,15 @@ def decrypt_verification_token(token: str) -> EmailStr:
         decrypted_data = cipher_suite.decrypt(decoded_encrypted_data).decode()
         decrypted_dict = json.loads(decrypted_data)
 
-        assert "email" in decrypted_dict, "Token is missing important part"
-        assert "expire" in decrypted_dict, "Token is missing important part"
+        if "email" not in decrypted_dict or "expire" not in decrypted_dict:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="token missing vital part",
+            )
 
-    except AssertionError as ase:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ase))
+    except HTTPException as he:
+        raise HTTPException(status_code=he.status_code, detail=he.detail) from he
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Token"
@@ -100,12 +103,16 @@ def decrypt_magic_link_token(token: str) -> EmailStr:
 
         # Validate the email and expiry timestamp
 
-        assert token_type == "magiclink", "Invalid token type."
-        assert "@" in email, "Token is malformed."
-        assert expiry_timestamp is not None, "Token is missing important part"
+        if token_type != "magiclink":
+            raise HTTPException(status_code=400, detail="Invalid token type.")
+        if not is_email(email):
+            raise HTTPException(status_code=400, detail="Token is malformed.")
+        if expiry_timestamp is None:
+            raise HTTPException(status_code=400, detail="Token is missing timestamp.")
 
-    except AssertionError as ase:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ase))
+    except HTTPException as he:
+        raise HTTPException(status_code=he.status_code, detail=he.detail) from he
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Token"
@@ -142,23 +149,18 @@ def decrypt_password_reset_token(token: str) -> EmailStr:
     Decrypts and validates reset password token. Returns the user email address if valid.
     """
 
-    try:
-        decoded_encrypted_data = base64.urlsafe_b64decode(token)
-        decrypted_data = cipher_suite.decrypt(decoded_encrypted_data).decode()
-        email, expiry_timestamp, token_type = decrypted_data.split("-")
+    decoded_encrypted_data = base64.urlsafe_b64decode(token)
+    decrypted_data = cipher_suite.decrypt(decoded_encrypted_data).decode()
+    email, expiry_timestamp, token_type = decrypted_data.split("-")
 
-        # Validate the email and expiry timestamp
+    # Validate the email and expiry timestamp
 
-        assert token_type == "passwordreset", "Invalid token type."
-        assert "@" in email, "Token is malformed."
-        assert expiry_timestamp is not None, "Token is missing important part"
-
-    except AssertionError as ase:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ase))
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Token"
-        )
+    if token_type != "passwordreset":
+        raise HTTPException(status_code=400, detail="Invalid token type.")
+    if not is_email(email):
+        raise HTTPException(status_code=400, detail="Token is malformed.")
+    if expiry_timestamp is None:
+        raise HTTPException(status_code=400, detail="Token is missing timestamp.")
 
     current_timestamp = datetime.now(timezone.utc).timestamp()
 
@@ -168,3 +170,51 @@ def decrypt_password_reset_token(token: str) -> EmailStr:
         )
 
     return email
+
+
+def generate_email_otp_login_temp_token(user_id: str, validity: int = 10) -> str:
+    """
+    Generate temporary token for email OTP login.\n
+    token format: email-validity-tokenType. \n
+    Default validity is 10mins
+    """
+
+    token_data = f"{user_id}:{(datetime.now(timezone.utc) + timedelta(minutes=validity)).timestamp()}:emailotp"
+
+    temp_token = base64.urlsafe_b64encode(
+        cipher_suite.encrypt(token_data.encode())
+    ).decode()
+
+    return temp_token
+
+
+def decrypt_email_otp_login_temp_token(token: str) -> str:
+    """
+    Decrypts and validates email OTP login temporary token.
+    Returns the user ID.
+    """
+
+    decoded_encrypted_data = base64.urlsafe_b64decode(token)
+    decrypted_data = cipher_suite.decrypt(decoded_encrypted_data).decode()
+    user_identifier, expiry_timestamp, token_type = decrypted_data.split(":")
+
+    # Validate the email and expiry timestamp
+
+    if token_type != "emailotp":
+        raise HTTPException(status_code=400, detail="Invalid temporary token type.")
+    if not is_uuid(user_identifier):
+        raise HTTPException(status_code=400, detail="Temporary token is malformed.")
+    if expiry_timestamp is None:
+        raise HTTPException(
+            status_code=400, detail="Temporary token is missing timestamp."
+        )
+
+    current_timestamp = datetime.now(timezone.utc).timestamp()
+
+    if current_timestamp > float(expiry_timestamp):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Temporary token has expired",
+        )
+
+    return user_identifier
