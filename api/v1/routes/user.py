@@ -26,6 +26,8 @@ from api.v1.schemas.user import (
     UserSelfDeleteRequest,
     DeactivateUserSchema,
     AccountRestoreRequest,
+    AccountBanRequest,
+    AccountUnbanRequest,
 )
 from api.v1.schemas.audit_logs import (
     AuditLogCreate,
@@ -515,6 +517,73 @@ async def deactivate_a_user_auth_account(
     return JsonResponseDict(
         message=f"{user.email} account has been deactivated.",
         status_code=status.HTTP_200_OK,
+    )
+
+
+@account_router.patch(
+    "/ban",
+    status_code=status.HTTP_200_OK,
+    tags=["Account"],
+    description="Place ban on an account",
+)
+def ban_a_user_account(
+    data: AccountBanRequest,
+    moderator_superadmin: User = Depends(user_service.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Ban a user account.
+    Only accessible to superadmins and moderators.
+    """
+
+    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
+        )
+
+    user = user_service.ban_user(
+        db=db, user_id=data.user_identifier, reason=data.reason
+    )
+
+    if user:
+        return JsonResponseDict(
+            message=f"{user.email} account has been banned.",
+            status_code=status.HTTP_200_OK,
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND, detail="Account not found."
+    )
+
+
+@account_router.patch("/unban", status_code=status.HTTP_200_OK, tags=["Account"])
+def unban_a_user_account(
+    data: AccountUnbanRequest,
+    moderator_superadmin: User = Depends(user_service.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    lift ban from user account.
+    Only accessible to superadmins and moderators.
+    """
+
+    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
+        )
+
+    user = user_service.unban_user(
+        db=db, user_id=data.user_identifier, reason=data.reason
+    )
+
+    if user:
+        return JsonResponseDict(
+            message=f"Ban successfully lifted.",
+            status_code=status.HTTP_200_OK,
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND, detail="Account not found."
     )
 
 
