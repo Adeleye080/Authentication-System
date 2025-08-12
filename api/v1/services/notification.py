@@ -10,6 +10,8 @@ from api.utils.encrypters_and_decrypters import (
     generate_user_verification_token,
     generate_password_reset_token,
 )
+from datetime import datetime
+from typing import Optional
 
 
 class Notification:
@@ -274,5 +276,35 @@ class Notification:
             template_context={
                 "username": user.email,
                 "code": otp_code,
+            },
+        )
+
+    def send_new_device_login_alert(
+        self,
+        user: User,
+        login_time: str | datetime,
+        login_location: Optional[str],
+        login_device_name: str,
+        login_ip_address: str,
+        bgt: BackgroundTasks,
+    ) -> None:
+        """
+        Send new device alert notification to user
+        """
+        from api.utils.dates import normalize_date
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Alert: New Device Just Accessed Your Account.",
+            template_name="new_device_login_template.html",
+            template_context={
+                "username": user.email,
+                "loginTime": normalize_date(login_time) or login_time,
+                "location": login_location or "N/A",
+                "device": login_device_name,
+                "ipAddress": login_ip_address,
+                "securityPageLink": settings.FRONTEND_HOME_URL.strip("/")
+                or settings.FRONTEND_DASHBOARD_URL.strip("/"),
             },
         )
