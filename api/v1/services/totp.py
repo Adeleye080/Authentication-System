@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from api.v1.models.sms_otp import SMSOtpCodes
 from api.v1.models.email_otp import EmailOtpCodes
 from api.utils.settings import settings
+from api.utils.validators import is_email, is_uuid
 from fastapi import HTTPException, status
 from api.v1.models.totp_device import TOTPDevice
 import pyotp
@@ -305,31 +306,59 @@ class TOTPService:
         db.commit()
         return otp_code
 
-    def verify_email_otp_code(self, db: Session, code: str, user_id: str) -> None:
+    def verify_email_otp_code(
+        self, db: Session, code: str, user_identifier: str
+    ) -> None:
         """
         Verify Email OTP code.
         Deletes the OTP from the database after verification.
+
+        :param db: Database session
+        :param code: OTP code to verify
+        :param user_identifier: User identifier (email or user ID)
         """
+        from api.v1.models.email_otp import EmailOtpCodes
 
         exception = HTTPException(status_code=400, detail="Wrong OTP provided.")
 
-        stored_otp = (
-            db.query(EmailOtpCodes).filter(EmailOtpCodes.user_id == user_id).first()
-        )
+        stored_otp = None
+
+        if is_email(user_identifier):
+            # If user_identifier is an email, fetch by email
+            stored_otp = (
+                db.query(EmailOtpCodes)
+                .filter(EmailOtpCodes.email == user_identifier)
+                .first()
+            )
+        elif is_uuid(user_identifier):
+            # If user_identifier is a UUID, fetch by user ID
+            stored_otp = (
+                db.query(EmailOtpCodes)
+                .filter(EmailOtpCodes.user_id == user_identifier)
+                .first()
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid user identifier format.",
+            )
+
         if not stored_otp:
             raise exception
 
-        # check if code is expired
-        if stored_otp.created_at + timedelta(minutes=5) < datetime.now(timezone.utc):
-            db.delete(stored_otp)
-            db.commit()
-            raise HTTPException(status_code=400, detail="OTP code has expired.")
+        from api.v1.models.email_otp import EmailOtpCodes
 
-        expected_hash = hashlib.sha256(f"{code}:{user_id}".encode()).hexdigest()
+        expected_hash = EmailOtpCodes.hash_otp_code(code, user_identifier)
+
+        print(code)
+        print(stored_otp.code_hash)
+        print(expected_hash)
         if stored_otp.code_hash == expected_hash:
             pass
         else:
-            raise exception
+            return False
 
         db.delete(stored_otp)
         db.commit()
+
+        return True
