@@ -56,7 +56,6 @@ async def enable_totp(
             user_email=user.email,
         )
     except HTTPException as e:
-        print(e)
         return JsonResponseDict(
             status_code=e.status_code,
             message=e.detail,
