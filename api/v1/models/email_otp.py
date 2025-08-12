@@ -21,8 +21,14 @@ class EmailOtpCodes(Base):
     @classmethod
     def create(cls, code: str, user_id: str):
         """Use to create Email OTP instance"""
+        print("created code: ", code)
         code_hash = hashlib.sha256(f"{code}:{user_id}".encode()).hexdigest()
         return cls(user_id=user_id, code_hash=code_hash)
+
+    @classmethod
+    def hash_otp_code(cls, code: str, user_id: str) -> str:
+        """Generates a hash for the OTP code."""
+        return hashlib.sha256(f"{code}:{user_id}".encode()).hexdigest()
 
     def __repr__(self):
         return f"<UserEmailCode(id={self.id}, user_id={self.user_id}, created_at={self.created_at.isoformat()})>"
