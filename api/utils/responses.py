@@ -1,6 +1,6 @@
+from typing import Optional
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
-from typing import Any, Dict, Optional
 
 
 def all_users_response(
@@ -58,17 +58,66 @@ def all_users_response(
 
 
 def auth_response(
-    status_code: int, message: str, access_token: str, data: Optional[dict] = None
+    status: str,
+    status_code: int,
+    message: str,
+    access_token: str,
+    refresh_token: str,
+    user_data: dict,
+    token_scheme: str = "Bearer",
 ):
     """Returns a JSON response for successful auth responses"""
 
     response_data = {
-        "status": "success",
+        "status": status,
         "status_code": status_code,
         "message": message,
         "data": {
-            "access_token": access_token,
-            **(data or {}),  # Merge additional data if provided
+            "tokens": {
+                "scheme": token_scheme,
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+            },
+            "profile": user_data,
+        },
+    }
+
+    return JSONResponse(
+        status_code=status_code, content=jsonable_encoder(response_data)
+    )
+
+
+def all_logs_response(
+    current_page: int,
+    per_page: int,
+    total: int,
+    total_pages: int,
+    status_code: int = 200,
+    status: str = "success",
+    prev_page: str = None,
+    next_page: str = None,
+    count: int = 0,
+    data: Optional[dict] = None,
+):
+    """
+    Json response for all Logs
+    """
+
+    response_data = {
+        "status": status,
+        "status_code": status_code,
+        "message": "Retrieved logs successfully",
+        "data": data or {},
+        "pagination": {
+            "current_page": current_page,
+            "per_page": per_page,
+            "count": count,
+            "total_pages": total_pages,
+            "total": total,
+            "links": {
+                "prev_page": prev_page,
+                "next_page": next_page,
+            },
         },
     }
 

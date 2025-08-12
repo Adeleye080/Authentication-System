@@ -1,5 +1,4 @@
-""" The database module
-"""
+"""The database module"""
 
 from sqlalchemy.orm import sessionmaker, scoped_session, declarative_base
 from sqlalchemy import create_engine
@@ -53,6 +52,7 @@ def create_database():
 
 
 def get_db():
+    """Database session generator"""
     db = db_session()
     try:
         yield db
