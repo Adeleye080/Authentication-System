@@ -300,7 +300,8 @@ class Notification:
             template_name="new_device_login_template.html",
             template_context={
                 "username": user.email,
-                "loginTime": normalize_date(login_time) or login_time,
+                "loginTime": normalize_date(login_time).replace("by", "at")
+                or login_time,
                 "location": login_location or "N/A",
                 "device": login_device_name,
                 "ipAddress": login_ip_address,
