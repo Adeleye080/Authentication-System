@@ -153,3 +153,29 @@ class Disable2FARequest(BaseModel):
     """Schema for disabling 2FA"""
 
     password: str = Field(..., description="Password of the user to disable 2FA")
+
+
+class VerifyEmailOTPRequest(BaseModel):
+    """Schema for verifying email with OTP"""
+
+    temp_token: str = Field(
+        ...,
+        description="Temporary login token to verify user identity and tracks user.",
+    )
+    otp: str = Field(..., description="6-digit OTP code for verification")
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_otp(cls, values: dict):
+        """Validate OTP code format"""
+
+        otp_code = values.get("otp", None)
+        if not otp_code or len(str(otp_code)) != 6:
+            raise ValueError("OTP code must be a 6-digit number")
+
+        try:
+            int(otp_code)
+        except ValueError:
+            raise ValueError("OTP code must be a 6-digit number")
+
+        return values

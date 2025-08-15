@@ -10,6 +10,8 @@ from api.utils.encrypters_and_decrypters import (
     generate_user_verification_token,
     generate_password_reset_token,
 )
+from datetime import datetime
+from typing import Optional
 
 
 class Notification:
@@ -166,5 +168,144 @@ class Notification:
         bgt.add_task(
             func=send_sms_message,
             phone_number=number,
-            message=f"Your OTP code is {otp_code}\n\nPlease do not share this code with anyone.",
+            message=f"Your OTP code is {otp_code}\n\nPlease do not share this code with anyone.\nThis code is valid for 10 minutes.",
+        )
+
+    def send_account_reactivation_link(
+        self,
+        user: User,
+        reactivation_link: str,
+        link_validity_days: int,
+        bgt: BackgroundTasks,
+    ) -> None:
+        """Sends account reactivation link email to user"""
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Your account reactivation link",
+            template_name="account_reactivation_link.html",
+            template_context={
+                "username": user.email,
+                "linkValidity": link_validity_days,
+                "reactivationLink": reactivation_link,
+            },
+        )
+
+    def send_success_account_reactivation_mail(
+        self, user: User, bgt: BackgroundTasks
+    ) -> None:
+        """Send mail to user  after successful account reactivation"""
+
+        template_context = {
+            "dashboardLink": settings.FRONTEND_DASHBOARD_URL.strip("/")
+            or settings.FRONTEND_HOME_URL.strip("/"),
+            "username": user.email,
+        }
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Your account is active!",
+            template_name="success_account_reactivation.html",
+            template_context=template_context,
+        )
+
+    def send_account_deactivation_mail(
+        self, user: User, reactivation_link: str, bgt: BackgroundTasks
+    ) -> None:
+        """Send mail to user after successful account deactivation"""
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Account Deactivated",
+            template_name="account_deactivation.html",
+            template_context={
+                "username": user.email,
+                "reactivationLink": (
+                    reactivation_link.strip("/") if reactivation_link else None
+                ),
+            },
+        )
+
+    def send_account_update_notification(
+        self, user: User, bgt: BackgroundTasks
+    ) -> None:
+        """Notify users of changes they made on their account"""
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Account Updated",
+            template_name="account_updated_mail.html",
+            template_context={
+                "username": user.email,
+                "dashboardLink": settings.FRONTEND_DASHBOARD_URL.strip("/")
+                or settings.FRONTEND_HOME_URL.strip("/"),
+            },
+        )
+
+    def send_account_restore_notification(
+        self, user: User, bgt: BackgroundTasks
+    ) -> None:
+        """Notify users of successful account restoration"""
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Account Restored",
+            template_name="account_restored_mail.html",
+            template_context={
+                "username": user.email,
+                "loginLink": settings.FRONTEND_DASHBOARD_URL.strip("/")
+                or settings.FRONTEND_HOME_URL.strip("/"),
+            },
+        )
+
+    def send_email_otp_verification_code(
+        self, user: User, otp_code: int, bgt: BackgroundTasks
+    ) -> None:
+        """Send email OTP verification code to user"""
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Your OTP Verification Code",
+            template_name="email_otp_verification_template.html",
+            template_context={
+                "username": user.email,
+                "code": otp_code,
+            },
+        )
+
+    def send_new_device_login_alert(
+        self,
+        user: User,
+        login_time: str | datetime,
+        login_location: Optional[str],
+        login_device_name: str,
+        login_ip_address: str,
+        bgt: BackgroundTasks,
+    ) -> None:
+        """
+        Send new device alert notification to user
+        """
+        from api.utils.dates import normalize_date
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user.email,
+            subject="Alert: New Device Just Accessed Your Account.",
+            template_name="new_device_login_template.html",
+            template_context={
+                "username": user.email,
+                "loginTime": normalize_date(login_time).replace("by", "at")
+                or login_time,
+                "location": login_location or "N/A",
+                "device": login_device_name,
+                "ipAddress": login_ip_address,
+                "securityPageLink": settings.FRONTEND_HOME_URL.strip("/")
+                or settings.FRONTEND_DASHBOARD_URL.strip("/"),
+            },
         )

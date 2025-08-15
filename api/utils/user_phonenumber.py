@@ -13,4 +13,4 @@ async def get_user_phonenumber_from_user_service(user_email: str) -> str:
             headers=headers,
         )
         response.raise_for_status()
-        return response.json().get("phone_number")
+        return response.json().get("phone_number", None)

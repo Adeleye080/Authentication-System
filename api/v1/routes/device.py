@@ -1,7 +1,7 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Path
 from api.v1.models.user import User
-from api.v1.services import user_service
-from api.v1.schemas.user import UserID
+from api.v1.services import user_service, devices_service
+from api.utils.json_response import JsonResponseDict
 from db.database import get_db
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,27 @@ def get_devices(user: User = Depends(user_service.get_current_user)):
     return devices
 
 
+@user_device_router.delete("/@me/{device_id}")
+async def delete_self_device(
+    device_id: str = Path(..., description="ID of the user's device to delete"),
+    user: User = Depends(user_service.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a self device"""
+
+    try:
+        devices_service.delete(db=db, device_id=device_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="We couldn't remove the device, try again later.",
+        )
+
+    return JsonResponseDict(
+        message="Device removed successfully", status_code=status.HTTP_200_OK
+    )
+
+
 @user_device_router.get(
     "/user/{user_id}",
     tags=["Moderator", "Superadmin"],
@@ -28,7 +49,7 @@ def get_devices(user: User = Depends(user_service.get_current_user)):
     status_code=status.HTTP_200_OK,
 )
 def get_user_devices_by_user_id(
-    user_id: str,
+    user_id: str = Path(..., description="ID of the owner of the device"),
     moderator_superadmin: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
 ):
