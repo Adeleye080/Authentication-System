@@ -433,7 +433,7 @@ async def admin_activate_user(
     moderator_superadmin: User = Depends(user_service.get_current_user),
 ):
     """
-    [Moderator, Superadmin] Activate an Auth user.
+    [Moderator, Superadmin] Activate account.
     """
 
     if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
@@ -496,7 +496,7 @@ async def deactivate_a_user_auth_account(
     moderator_superadmin: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """ """
+    """Deactivate account"""
 
     if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
         raise HTTPException(
