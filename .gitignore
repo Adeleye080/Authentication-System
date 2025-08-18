@@ -17,3 +17,4 @@ app_logs/
 *.gz
 GeoLite2-*
 .idea/
+todo.txt
