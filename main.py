@@ -45,11 +45,9 @@ app = FastAPI(
     title="FastAPI Authentication System",
     description="Welcome to FastAPI Authentication system by [Ajiboye Pius A.](https://ajiboye-pius.vercel.app)",
     version="1.0.0",
-    license_info={"name": "MIT", "url": "https://ajiboye-pius.vercel.app"},
+    license_info={"name": "MIT"},
     contact={
         "name": "AuthSystem API Support",
-        "url": "https://ajiboye-pius.vercel.app",
-        "email": "ajiboyeadeleye080@gmail.com",
     },
     docs_url="/documentation",
     openapi_url=openapi_url,
