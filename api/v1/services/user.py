@@ -12,6 +12,7 @@ from db.database import get_db
 from api.utils.settings import settings
 from api.v1.models.user import User
 from api.v1.models.refresh_token import RefreshToken
+from api.v1.models.attributes import UserAttribute
 from api.v1.schemas.audit_logs import (
     AuditLogCreate,
     AuditLogEventEnum,
@@ -1030,6 +1031,9 @@ class UserService(Service):
 
         if not any([user_obj, user_id]):
             raise ValueError("User ID or User Object must be given")
+
+        attributes = None
+
         if user_obj:
             attributes = {attr.key: attr.value for attr in user_obj.attributes}
         elif user_id:
@@ -1044,6 +1048,45 @@ class UserService(Service):
         if not attributes:
             return {}
         return attributes
+
+    def add_new_attribute_to_user(
+        db: Session, user_id: str, key: str, value: str
+    ) -> UserAttribute:
+        """Associate new attribute to a user"""
+
+        key, value = key.lower(), value.lower()
+
+        attr_exist = (
+            db.query(UserAttribute)
+            .filter(UserAttribute.key == key, UserAttribute.user_id == user_id)
+            .first()
+        )
+        if attr_exist:
+            raise HTTPException(
+                detail=f"user already have attribute '{key}'",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        attr = UserAttribute(user_id=user_id, key=key, value=value)
+
+        db.add(attr)
+        db.commit()
+
+        return attr
+
+    def delete_user_attribute(self, db: Session, attribute_key: str, user_id: str):
+        """Delete a user attribute"""
+
+        try:
+            db.query(UserAttribute).filter(
+                UserAttribute.user_id == user_id, UserAttribute.key == attribute_key
+            ).delete()
+        except Exception:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="error deleting attribute",
+            )
 
     def restore_soft_deleted_user(self, db: Session, user_identifier: str) -> User:
         """
