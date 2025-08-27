@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 oauth2_router = APIRouter(prefix="/oauth2", tags=["OAuth2"])
 
 
-@oauth2_router.post("/login/{provider}")
+@oauth2_router.get("/login/{provider}")
 async def login(
     request: Request,
     provider: str,
@@ -41,7 +41,9 @@ async def login(
     """Login route for OAuth2 providers"""
 
     if provider not in oauth2_service.secureOAuth()._registry:
-        raise HTTPException(status_code=400, detail="Unsupported provider")
+        raise HTTPException(
+            status_code=400, detail=f"{provider} OAuth is not supported"
+        )
 
     # Redirect to the provider's authorization URL
     if provider == "github":
@@ -60,8 +62,20 @@ async def login(
             request, redirect_uri
         )
 
+    elif provider == "microsoft":
+        redirect_uri = request.url_for("authorize", provider="microsoft")
+        return await oauth2_service.secureOAuth().microsoft.authorize_redirect(
+            request, redirect_uri
+        )
 
-@oauth2_router.get("/authorize/{provider}", include_in_schema=False)
+    elif provider == "apple":
+        redirect_uri = request.url_for("authorize", provider="apple")
+        return await oauth2_service.secureOAuth().apple.authorize_redirect(
+            request, redirect_uri
+        )
+
+
+@oauth2_router.get("/authorize/{provider}/callback")
 async def authorize(
     provider: str, request: Request, bgt: BackgroundTasks, db: Session = Depends(get_db)
 ):
@@ -90,19 +104,44 @@ async def authorize(
             "me?fields=id,name,email,first_name,middle_name,last_name,birthday,gender,picture",
             token=token,
         )
+    elif provider == "microsoft":
+        token = await oauth2_service.secureOAuth().microsoft.authorize_access_token(
+            request
+        )
+        response = await oauth2_service.secureOAuth().microsoft.get("me", token=token)
+        user_info = response.json()
+        email = user_info.get("mail", user_info.get("userPrincipalName"))
+        user_info["email"] = email
+
+    elif provider == "apple":
+        token = await oauth2_service.secureOAuth().apple.authorize_access_token(request)
+        id_token = token.get("id_token", None)
+        if not id_token:
+            raise HTTPException(status_code=400, detail="Invalid User Apple ID token")
+        user_info = token
+
     else:
         raise HTTPException(status_code=400, detail="Unsupported provider")
 
     user_email = user_info.get("email", None)
+    user_obj = None
+    user_exist = False
 
     if not user_email:
+        if provider == "apple":
+            # Apple may not provide email if it's not verified or if the user chose to hide it
+            # get user object with apple persistent sub id
+            # user_exist = True
+            # user_obj =
+            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Invalid user object from OAuth provider",
         )
 
     # generate user access and refresh tokens
-    user_exist, user_obj = User().user_exists(db=db, email=user_email)
+    if not user_exist and not user_obj:
+        user_exist, user_obj = User().user_exists(db=db, email=user_email)
 
     if not user_exist:
         user = User(email=user_email, password=str(random.randint(5, 15)))
@@ -147,12 +186,16 @@ async def authorize(
         user.login_source = LoginSource.FACEBOOK
     elif provider == "google":
         user.login_source = LoginSource.GOOGLE
+    elif provider == "apple":
+        user.login_source = LoginSource.APPLE
+    elif provider == "microsoft":
+        user.login_source = LoginSource.MICROSOFT
 
     # update login source and last login time
     user.save(db=db)
 
     # save user device
-    device_info = get_device_info(request)
+    device_info = await get_device_info(request)
     devices_service.create_with_bgt(db=db, device_info=device_info, owner=user, bgt=bgt)
 
     # construct redirect url
