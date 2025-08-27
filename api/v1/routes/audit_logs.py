@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status, Depends, HTTPException, Query
+from fastapi import APIRouter, status, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
@@ -7,6 +7,7 @@ from api.utils.responses import all_logs_response
 from db.database import get_db
 from api.v1.services import user_service, audit_log_service
 from api.v1.models.user import User
+import urllib.parse
 
 
 audit_log_router = APIRouter(prefix="/logs", tags=["Audit Logs"])
@@ -19,6 +20,7 @@ audit_log_router = APIRouter(prefix="/logs", tags=["Audit Logs"])
     response_model=AllLogsResponse,
 )
 def fetch_all_audit_logs(
+    request: Request,
     user_id: Optional[str] = Query(None),
     event: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -58,6 +60,25 @@ def fetch_all_audit_logs(
     logs_count = len(logs)
     total_pages = (total_logs + per_page - 1) // per_page
 
+    query_params_dict = {
+        "user_id": user_id,
+        "event": event,
+        "status": status,
+        "start_time": start_time.isoformat() if start_time else None,
+        "end_time": end_time.isoformat() if end_time else None,
+        "per_page": per_page,
+    }
+
+    url = str(request.url).split("?")[0]
+    query_params = urllib.parse.urlencode(
+        {k: v for k, v in query_params_dict.items() if v is not None},
+        quote_via=urllib.parse.quote,
+    )
+    prev_page = f"{url}?" + query_params + f"&page={page - 1}" if page > 1 else None
+    next_page = (
+        f"{url}?" + query_params + f"&page={page + 1}" if page < total_pages else None
+    )
+
     return all_logs_response(
         current_page=page,
         per_page=per_page,
@@ -66,8 +87,8 @@ def fetch_all_audit_logs(
         count=logs_count,
         status_code=200,
         data=[log.to_dict() for log in logs],
-        prev_page=f"/?page={page - 1}" if page > 1 else None,
-        next_page=f"/?page={page + 1}" if page < total_pages else None,
+        prev_page=prev_page,
+        next_page=next_page,
     )
 
 
