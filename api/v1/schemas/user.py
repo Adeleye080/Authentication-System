@@ -148,6 +148,8 @@ class LoginSource(str, PyEnum):
     MAGICLINK = "magiclink"
     FACEBOOK = "facebook"
     GITHUB = "github"
+    MICROSOFT = "microsoft"
+    APPLE = "apple"
 
 
 class OAuthProviders(BaseModel):
