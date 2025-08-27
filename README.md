@@ -16,7 +16,7 @@ The system supports both primary and secondary roles for users. While the primar
 ## Features
 
 - **JWT Authentication**: Secure, stateless authentication using JSON Web Tokens for API access.
-- **OAuth2 Support**: Social login and third-party authentication (Google, Facebook, etc).
+- **OAuth2 Support**: Social login and third-party authentication (Google, Facebook, GitHub, Apple and Microsoft).
 - **Multi-Factor Authentication (MFA)**: TOTP (Google Authenticator), SMS OTP, and Email OTP for enhanced security.
 - **Device & Location Tracking**: Detects suspicious logins using device fingerprinting and multi-source geo-location tracking (MaxMind, IP-API, IPAPI.co, IPWho.is).
 - **Country Blacklisting**: Block or restrict access from specific countries with admin controls, audit history, and multiple fallback location providers.
@@ -54,7 +54,7 @@ graph TD
   - Email OTPs for suspicious login detection
   - Password-based authentication with secure hashing
   - Magic Link authentication via secure email
-  - OAuth2 login (Google, Facebook and GitHub)
+  - OAuth2 login (Google, Facebook, GitHub, Apple and Microsoft)
   - Refresh token tracking with device fingerprinting
   - Service app authentication with API keys and scopes
 
