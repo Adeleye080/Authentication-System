@@ -171,7 +171,7 @@ async def verify_totp(
         )
 
         # verify user temporary login token
-        user_id = user_service.decrypt_and_validate_temp_login_token(
+        user_id = user_service.decrypt_and_validate_2fa_temp_login_token(
             token=data.temp_code, current_ip=get_client_ip(request)
         )
 
@@ -372,7 +372,7 @@ if settings.ALLOW_SMS_AUTH and settings.USER_SERVICE_PHONE_NUMBER_URL != "0":
             )
 
         # verify user temporary login token
-        user_id = user_service.decrypt_and_validate_temp_login_token(
+        user_id = user_service.decrypt_and_validate_2fa_temp_login_token(
             token=data.temp_code, current_ip=get_client_ip(request)
         )
 
