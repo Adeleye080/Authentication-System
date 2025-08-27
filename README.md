@@ -193,3 +193,5 @@ ISC License. See [LICENSE](LICENSE) for details.
 
 Ajiboye Adeleye Pius  
 <ajiboyeadeleye080@gmail.com>
+
+_This product includes GeoLite2 Data created by [MaxMind](https://www.maxmind.com.)_
