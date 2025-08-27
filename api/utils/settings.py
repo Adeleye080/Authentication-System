@@ -117,15 +117,27 @@ class Settings(BaseSettings):
         default="Krq0Q8LWlYYv7famIjZ1k2gyzRZqEnKUqeEz2JX9CaQ=",
     )
 
+    GOOGLE_OAUTH: bool = config("GOOGLE_OAUTH", cast=bool, default=True)
+    GITHUB_OAUTH: bool = config("GITHUB_OAUTH", cast=bool, default=True)
+    FACEBOOK_OAUTH: bool = config("FACEBOOK_OAUTH", cast=bool, default=True)
+    MICROSOFT_OAUTH: bool = config("MICROSOFT_OAUTH", cast=bool, default=True)
+    APPLE_OAUTH: bool = config("APPLE_OAUTH", cast=bool, default=False)
+
     # OAUTH CONFIG
     GITHUB_CLIENT_ID: str = config("GITHUB_CLIENT_ID")
-    GITHUB_CLIENT_SECRET: str = config("GITHUB_CLIENT_SECRET", default="acde12")
+    GITHUB_CLIENT_SECRET: str = config("GITHUB_CLIENT_SECRET", default="")
 
     GOOGLE_CLIENT_ID: str = config("GOOGLE_CLIENT_ID")
     GOOGLE_CLIENT_SECRET: str = config("GOOGLE_CLIENT_SECRET")
 
-    FACEBOOK_APP_ID: str = config("FACEBOOK_APP_ID", default="acde12")
-    FACEBOOK_APP_SECRET: str = config("FACEBOOK_APP_SECRET", default="acde12")
+    FACEBOOK_APP_ID: str = config("FACEBOOK_APP_ID", default="")
+    FACEBOOK_APP_SECRET: str = config("FACEBOOK_APP_SECRET", default="")
+
+    MICROSOFT_CLIENT_ID: str = config("MICROSOFT_CLIENT_ID", default="")
+    MICROSOFT_CLIENT_SECRET: str = config("MICROSOFT_CLIENT_SECRET", default="")
+
+    APPLE_PRIVATE_KEY: str = config("APPLE_PRIVATE_KEY", default="")
+    APPLE_KEY_ID: str = config("APPLE_KEY_ID", default="")
 
     # MAXMIND CREDENTIALS (FOR GEOLOCATION)
     MAXMIND_ACCOUNT_ID: str = config("MAXMIND_ACCOUNT_ID")
