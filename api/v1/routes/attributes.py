@@ -31,10 +31,13 @@ def create_user_attribute(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
         )
 
-    attribute = UserAttribute(user_id=user_id, key=data.key, value=data.value)
+    # attribute = UserAttribute(user_id=user_id, key=data.key, value=data.value)
 
     user_service.add_new_attribute_to_user(
-        db=db, user_id=user_id, key=data.key, value=data.value
+        db=db,
+        user_id=user_id,
+        key=data.key,
+        value=data.value,
     )
 
     return JsonResponseDict(message="Attribute has been added to user")
@@ -52,6 +55,13 @@ def get_self_attributes(
     """Retrieve self attributes"""
 
     attributes = user_service.get_user_attributes(db=db, user_obj=user)
+
+    if attributes is None or len(attributes) == 0:
+        return JsonResponseDict(
+            message="you have no attributes",
+            data="empty",
+            status_code=status.HTTP_200_OK,
+        )
 
     return JsonResponseDict(
         message="successfully retrieved your attributes", data=attributes
