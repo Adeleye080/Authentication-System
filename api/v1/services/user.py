@@ -1,11 +1,11 @@
 from fastapi import HTTPException, Depends, Request, status, Security
 from fastapi.security import OAuth2PasswordBearer
-from passlib.context import CryptContext  # type: ignore
+from passlib.context import CryptContext
 from typing import Tuple, Optional, List
 from pydantic import EmailStr
 from sqlalchemy.orm import Session
 import datetime as dt
-from jose import JWTError, jwt, ExpiredSignatureError  # type: ignore
+from jose import JWTError, jwt, ExpiredSignatureError
 from sqlalchemy import func
 from db.database import get_db
 
@@ -378,7 +378,7 @@ class UserService(Service):
         """Function to create access token"""
 
         try:
-            secondary_role = user_obj.secondary_role
+            secondary_roles = [role for role in user_obj.secondary_roles]
             user_id = user_obj.id
 
             # define user role
@@ -396,7 +396,7 @@ class UserService(Service):
                 "exp": expires,
                 "type": "access",
                 "primary_role": user_role,
-                "secondary_role": secondary_role,
+                "secondary_roles": secondary_roles,
             }
 
             attributes = self.get_user_attributes(db=db, user_obj=user_obj)
@@ -983,7 +983,9 @@ class UserService(Service):
 
         return encoded_encrypted_token
 
-    def decrypt_and_validate_temp_login_token(self, token: str, current_ip: str) -> str:
+    def decrypt_and_validate_2fa_temp_login_token(
+        self, token: str, current_ip: str
+    ) -> str:
         """
         Decrypt and validate temporary login token. \n
         Return owner ID if valid, raise HTTPException otherwise
@@ -1140,3 +1142,51 @@ class UserService(Service):
         user.save(db=db)
 
         return user
+
+    def ensure_administrator(
+        self, user: User, err_msg: str = None
+    ) -> bool | HTTPException:
+        """
+        validate to ensure user is a moderator or superadmin.
+        Raise HTTPexception otherwise.
+        """
+
+        if not any([user.is_superadmin, user.is_moderator]):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=err_msg or "Not enough permissions.",
+            )
+
+        return True
+
+    def ensure_user_is_superadmin(
+        self, user: User, err_msg: str = None
+    ) -> bool | HTTPException:
+        """
+        validate to ensure user is a superadmin.
+        Raise HTTPexception otherwise.
+        """
+
+        if not user.is_superadmin:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=err_msg or "Not enough permissions.",
+            )
+
+        return True
+
+    def ensure_user_is_moderator(
+        self, user: User, err_msg: str = None
+    ) -> bool | HTTPException:
+        """
+        validate to ensure user is a moderator.
+        Raise HTTPexception otherwise.
+        """
+
+        if not user.is_moderator:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=err_msg or "Not enough permissions.",
+            )
+
+        return True
