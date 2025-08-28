@@ -26,10 +26,7 @@ def create_user_attribute(
 ):
     """Add new attribute to a user"""
 
-    if not any([admin_user.is_superadmin, admin_user.is_moderator]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
-        )
+    user_service.ensure_administrator(admin_user)
 
     # attribute = UserAttribute(user_id=user_id, key=data.key, value=data.value)
 
@@ -79,10 +76,7 @@ def get_user_attributes(
 ):
     """Retrieve the attributes of a user"""
 
-    if not any([admin_user.is_superadmin, admin_user.is_moderator]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
-        )
+    user_service.ensure_administrator(admin_user)
 
     attributes = user_service.get_user_attributes(db=db, user_id=user_id)
 
@@ -105,10 +99,7 @@ def delete_user_attribute(
 ):
     """Delete a specific attribute from a user"""
 
-    if not any([admin_user.is_superadmin, admin_user.is_moderator]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
-        )
+    user_service.ensure_administrator(admin_user)
 
     user_service.delete_user_attribute(db=db, user_id=user_id, key=attribute_key)
 
