@@ -25,6 +25,7 @@ from api.v1.schemas.user import (
     UserUpdateSchema,
     LoginSource,
 )
+from api.v1.schemas.roles import PrimaryRoleEnum
 from api.core.base.services import Service
 from api.utils.encrypters_and_decrypters import base64, cipher_suite
 import logging
@@ -1190,3 +1191,106 @@ class UserService(Service):
             )
 
         return True
+
+    def upgrade_user_primary_role(
+        self, db: Session, user_id: str, new_role: str, assigner_id: str
+    ) -> User:
+        """
+        Upgrade a user's primary role.
+
+        :param db: Database Session
+        :param user_id: ID of the user to be upgraded
+        :param new_role: Role to assign to user
+        :param assigner_id: ID of the admin performing the upgrade
+        """
+
+        # Prevent self-role changes
+        if user_id == assigner_id:
+            raise HTTPException(
+                detail="You cannot modify your own role.",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        target_user = self.fetch_by_id(db=db, id=user_id)
+
+        if not target_user.is_moderator and not target_user.is_superadmin:
+            if new_role == PrimaryRoleEnum.MODERATOR:
+                target_user.is_moderator = True
+            elif new_role == PrimaryRoleEnum.SUPERADMIN:
+                target_user.is_superadmin = True
+        elif target_user.is_moderator:
+            if new_role == PrimaryRoleEnum.MODERATOR:
+                raise HTTPException(
+                    detail=f"User already has the '{PrimaryRoleEnum.MODERATOR}' role",
+                    status_code=status.HTTP_409_CONFLICT,
+                )
+            elif new_role == PrimaryRoleEnum.SUPERADMIN:
+                target_user.is_moderator = False
+                target_user.is_superadmin = True
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot upgrade role further",
+            )
+
+        # save the changes
+        target_user.save()
+
+        return target_user
+
+    def downgrade_user_primary_role(
+        self, db: Session, user_id: str, new_role: str, assigner_id: str
+    ) -> User:
+        """
+        Downgrade a user's primary role
+
+        :param db: Database Session
+        :param user_id: ID of the user to be downgraded
+        :param new_role: Role to assign to user
+        :param assigner_id: ID of the admin performing the downgrade
+        """
+
+        # Prevent self-role changes
+        if user_id == assigner_id:
+            raise HTTPException(
+                detail="You cannot modify your own role.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        target_user = self.fetch_by_id(db=db, id=user_id)
+
+        if target_user.is_superadmin:
+            # check to see if there is at least one other superadmin
+            superadmin_count = (
+                db.query(User)
+                .filter(User.is_superadmin == True)
+                .filter(User.id != user_id)
+                .count()
+            )
+            if superadmin_count == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="At least one superadmin must remain in the system.",
+                )
+            if new_role == PrimaryRoleEnum.MODERATOR:
+                target_user.is_superadmin = False
+                target_user.is_moderator = True
+            elif new_role == PrimaryRoleEnum.USER:
+                target_user.is_superadmin = False
+        elif target_user.is_moderator:
+            if new_role == PrimaryRoleEnum.USER:
+                target_user.is_moderator = False
+            elif new_role == PrimaryRoleEnum.MODERATOR:
+                raise HTTPException(
+                    detail="User already has the 'moderator' role",
+                    status_code=status.HTTP_409_CONFLICT,
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot downgrade role further",
+            )
+
+        target_user.save()
+
+        return target_user
