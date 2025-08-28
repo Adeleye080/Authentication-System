@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Boolean, String, Index, Enum, DateTime, LargeBinary
 from sqlalchemy.orm import relationship
 from api.v1.models.base_model import BaseModel
+from api.v1.models.roles import auth_user_roles_association
 from api.v1.schemas.user import LoginSource
 from sqlalchemy.orm import Session
 from pydantic import EmailStr
@@ -22,8 +23,13 @@ class User(BaseModel):
     last_login = Column(DateTime, nullable=True)
     login_source = Column(Enum(LoginSource), nullable=True)
     is_banned = Column(Boolean, default=False, nullable=False)
-    secondary_role = Column(String(128), nullable=True)
 
+    secondary_roles = relationship(
+        "SecondaryRole",
+        backref="user",
+        secondary=auth_user_roles_association,
+        uselist=True,
+    )
     attributes = relationship("UserAttribute", backref="user", uselist=True)
 
     refresh_tokens = relationship(
@@ -51,7 +57,6 @@ class User(BaseModel):
         Index("ix_user_is_banned", "is_banned"),
         Index("ix_user_is_superadmin", "is_superadmin"),
         Index("ix_user_is_moderator", "is_moderator"),
-        Index("ix_user_secondary_role", "secondary_role"),
     )
 
     def to_dict(self, hide_sensitive_data: bool = True):
@@ -91,7 +96,7 @@ class User(BaseModel):
 
     def user_exists(
         self, db: Session, id: str = None, email: EmailStr = None
-    ) -> Tuple[bool, dict]:
+    ) -> Tuple[bool, "User"]:
         """
         Check if user exists in the database with the given email or ID.
         If both are given, it will check for the first one that is found.
@@ -100,7 +105,7 @@ class User(BaseModel):
         :param email: User email
         :param id: User ID
 
-        :return: (True, user_obj) if user exists, (False, {}) otherwise
+        :return: (True, user_object) if user exists, (False, None) otherwise
         """
 
         if not any([email, id]):
@@ -117,6 +122,6 @@ class User(BaseModel):
             user = db.query(User).filter_by(email=email).first()
 
         if user:
-            return (True, user.to_dict())
+            return (True, user)
 
-        return False, {}
+        return False, None
