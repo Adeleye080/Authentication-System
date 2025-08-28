@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from fastapi.responses import RedirectResponse
-from authlib.integrations.starlette_client import OAuth  # type: ignore
 from starlette.requests import Request
 import logging
 from api.utils.settings import settings
@@ -20,6 +19,7 @@ from api.v1.schemas.audit_logs import (
 )
 from api.v1.schemas.user import LoginSource
 from api.v1.services import geoip_service
+from api.utils.json_response import JsonResponseDict
 from sqlalchemy.orm import Session
 from db.database import get_db
 import random
@@ -32,13 +32,27 @@ logger = logging.getLogger(__name__)
 oauth2_router = APIRouter(prefix="/oauth2", tags=["OAuth2"])
 
 
+@oauth2_router.get("/providers")
+async def all_available_providers():
+    """Retrieve list of available supported OAuth 2.0 Providers"""
+
+    providers = oauth2_service.registered_providers
+
+    return JsonResponseDict(
+        message="Successfully fetched supported OAuth providers", data=providers
+    )
+
+
 @oauth2_router.get("/login/{provider}")
 async def login(
     request: Request,
     provider: str,
     _: None = Depends(geoip_service.blacklisted_country_dependency_check),
 ):
-    """Login route for OAuth2 providers"""
+    """
+    Login route for OAuth2 providers\n
+    The `provider` parameter should be lowercase.
+    """
 
     if provider not in oauth2_service.secureOAuth()._registry:
         raise HTTPException(
@@ -79,7 +93,10 @@ async def login(
 async def authorize(
     provider: str, request: Request, bgt: BackgroundTasks, db: Session = Depends(get_db)
 ):
-    """Authorization callback route for OAuth2 providers"""
+    """
+    Authorization callback route for OAuth2 providers\n
+    The `provider` parameter should be all lowercase.
+    """
 
     if provider not in oauth2_service.secureOAuth()._registry:
         raise HTTPException(status_code=400, detail="Unsupported provider")
@@ -144,7 +161,10 @@ async def authorize(
         user_exist, user_obj = User().user_exists(db=db, email=user_email)
 
     if not user_exist:
-        user = User(email=user_email, password=str(random.randint(5, 15)))
+        user = User(
+            email=user_email,
+            password=user_service.hash_password(str(random.randint(5, 150))),
+        )
         user.is_active = True
         user.is_verified = True
         user.save(db=db)
