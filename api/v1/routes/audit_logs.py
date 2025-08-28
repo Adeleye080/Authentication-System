@@ -29,12 +29,11 @@ def fetch_all_audit_logs(
     page: int = 1,
     per_page: int = 100,
     db: Session = Depends(get_db),
-    moderator_superadmin: User = Depends(user_service.get_current_user),
+    admin: User = Depends(user_service.get_current_user),
 ):
     """Fetches all audit logs"""
 
-    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
-        raise HTTPException(status_code=401, detail="Not enough permissions.")
+    user_service.ensure_administrator(admin)
 
     page = max(page, 1)
     per_page = max(per_page, 1)
@@ -98,14 +97,11 @@ def fetch_all_audit_logs(
 def fetch_single_audit_log(
     log_id: int,
     db: Session = Depends(get_db),
-    moderator_superadmin: User = Depends(user_service.get_current_user),
+    user: User = Depends(user_service.get_current_user),
 ):
     """Fetches a single audit log"""
 
-    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
-        )
+    user_service.ensure_administrator(user)
 
     single_log = audit_log_service.get(db=db, log_id=log_id)
 
