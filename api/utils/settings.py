@@ -117,11 +117,15 @@ class Settings(BaseSettings):
         default="Krq0Q8LWlYYv7famIjZ1k2gyzRZqEnKUqeEz2JX9CaQ=",
     )
 
-    GOOGLE_OAUTH: bool = config("GOOGLE_OAUTH", cast=bool, default=True)
-    GITHUB_OAUTH: bool = config("GITHUB_OAUTH", cast=bool, default=True)
-    FACEBOOK_OAUTH: bool = config("FACEBOOK_OAUTH", cast=bool, default=True)
-    MICROSOFT_OAUTH: bool = config("MICROSOFT_OAUTH", cast=bool, default=True)
-    APPLE_OAUTH: bool = config("APPLE_OAUTH", cast=bool, default=False)
+    ENABLE_GOOGLE_OAUTH: bool = config("ENABLE_GOOGLE_OAUTH", cast=bool, default=True)
+    ENABLE_GITHUB_OAUTH: bool = config("ENABLE_GITHUB_OAUTH", cast=bool, default=True)
+    ENABLE_FACEBOOK_OAUTH: bool = config(
+        "ENABLE_FACEBOOK_OAUTH", cast=bool, default=True
+    )
+    ENABLE_MICROSOFT_OAUTH: bool = config(
+        "ENABLE_MICROSOFT_OAUTH", cast=bool, default=True
+    )
+    ENABLE_APPLE_OAUTH: bool = config("ENABLE_APPLE_OAUTH", cast=bool, default=False)
 
     # OAUTH CONFIG
     GITHUB_CLIENT_ID: str = config("GITHUB_CLIENT_ID")
