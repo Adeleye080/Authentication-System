@@ -19,8 +19,9 @@ class OAuth2Service:
         # OAuth configurations
         config = Config(environ={})
         self.oauth = OAuth(config)
+        self.registered_providers = []
 
-        if settings.GOOGLE_OAUTH:
+        if settings.ENABLE_GITHUB_OAUTH:
             # register github
             self.oauth.register(
                 name="github",
@@ -31,8 +32,9 @@ class OAuth2Service:
                 api_base_url="https://api.github.com/",
                 client_kwargs={"scope": "user:email"},
             )
+            self.registered_providers.append("GitHub")
 
-        if settings.FACEBOOK_OAUTH:
+        if settings.ENABLE_GOOGLE_OAUTH:
             # register google
             self.oauth.register(
                 name="google",
@@ -44,8 +46,9 @@ class OAuth2Service:
                 api_base_url="https://www.googleapis.com/oauth2/v1/",
                 client_kwargs={"scope": "openid profile email"},
             )
+            self.registered_providers.append("Google")
 
-        if settings.GITHUB_OAUTH:
+        if settings.ENABLE_FACEBOOK_OAUTH:
             # register facebook
             self.oauth.register(
                 name="facebook",
@@ -58,8 +61,9 @@ class OAuth2Service:
                     "scope": "email,user_birthday,user_gender,public_profile"
                 },
             )
+            self.registered_providers.append("Facebook")
 
-        if settings.MICROSOFT_OAUTH:
+        if settings.ENABLE_MICROSOFT_OAUTH:
             # register microsoft
             self.oauth.register(
                 name="microsoft",
@@ -70,8 +74,9 @@ class OAuth2Service:
                 api_base_url="https://graph.microsoft.com/v1.0/",
                 client_kwargs={"scope": "User.Read"},
             )
+            self.registered_providers.append("Microsoft")
 
-        if settings.APPLE_OAUTH:
+        if settings.ENABLE_APPLE_OAUTH:
             # register apple
             self.oauth.register(
                 name="apple",
@@ -82,6 +87,7 @@ class OAuth2Service:
                 api_base_url="https://appleid.apple.com",
                 client_kwargs={"scope": "name email"},
             )
+            self.registered_providers.append("Apple")
 
     def secureOAuth(self) -> OAuth:
         """
