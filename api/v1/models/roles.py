@@ -1,6 +1,6 @@
 """Role models module."""
 
-from sqlalchemy import Column, Integer, String, Index, Table, ForeignKey
+from sqlalchemy import Column, Integer, String, Index, Table, ForeignKey, DateTime, func
 from db.database import Base
 
 
@@ -20,7 +20,9 @@ class SecondaryRole(Base):
     __tablename__ = "auth_secondary_roles"
 
     id = Column(Integer, primary_key=True, nullable=False, autoincrement=True)
-    name = Column(String(128), nullable=False)
+    name = Column(String(128), nullable=False, unique=True)
     description = Column(String(258), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_by = Column(String(36), nullable=False)
 
     __table_args__ = (Index("user_secondary_role", "name"),)
