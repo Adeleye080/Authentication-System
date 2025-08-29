@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any, Union, List
-from pydantic import BaseModel, Field, ConfigDict, EmailStr
+from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum as PyEnum
 from datetime import datetime
 
