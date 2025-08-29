@@ -379,7 +379,7 @@ class UserService(Service):
         """Function to create access token"""
 
         try:
-            secondary_roles = [role for role in user_obj.secondary_roles]
+            secondary_roles = [role.name for role in user_obj.secondary_roles]
             user_id = user_obj.id
 
             # define user role
@@ -1211,6 +1211,12 @@ class UserService(Service):
                 status_code=status.HTTP_403_FORBIDDEN,
             )
 
+        if new_role == PrimaryRoleEnum.USER:
+            raise HTTPException(
+                detail="Invalid role upgrade. Cannot upgrade to 'user' role.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
         target_user = self.fetch_by_id(db=db, id=user_id)
 
         if not target_user.is_moderator and not target_user.is_superadmin:
@@ -1218,6 +1224,7 @@ class UserService(Service):
                 target_user.is_moderator = True
             elif new_role == PrimaryRoleEnum.SUPERADMIN:
                 target_user.is_superadmin = True
+
         elif target_user.is_moderator:
             if new_role == PrimaryRoleEnum.MODERATOR:
                 raise HTTPException(
@@ -1234,7 +1241,7 @@ class UserService(Service):
             )
 
         # save the changes
-        target_user.save()
+        target_user.save(db=db)
 
         return target_user
 
@@ -1257,6 +1264,12 @@ class UserService(Service):
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
+        if new_role == PrimaryRoleEnum.SUPERADMIN:
+            raise HTTPException(
+                detail="Invalid role downgrade. Cannot downgrade to 'superadmin' role.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
         target_user = self.fetch_by_id(db=db, id=user_id)
 
         if target_user.is_superadmin:
@@ -1270,7 +1283,7 @@ class UserService(Service):
             if superadmin_count == 0:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="At least one superadmin must remain in the system.",
+                    detail="Cannot downgrade. at least one superadmin must remain in the system.",
                 )
             if new_role == PrimaryRoleEnum.MODERATOR:
                 target_user.is_superadmin = False
@@ -1291,6 +1304,6 @@ class UserService(Service):
                 detail="Cannot downgrade role further",
             )
 
-        target_user.save()
+        target_user.save(db)
 
         return target_user
