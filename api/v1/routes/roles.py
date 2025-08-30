@@ -133,6 +133,25 @@ async def create_secondary_role(
     )
 
 
+@roles_router.delete(
+    "/secondary/{role_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete a secondary role",
+)
+async def delete_secondary_role(
+    role_id: int,
+    db: Session = Depends(get_db),
+    superadmin: User = Depends(user_service.get_current_superadmin),
+):
+    """Delete a secondary role"""
+
+    deleted_role_name, _ = await secondary_role_service.delete_role(
+        db=db, role_id=role_id, action_by=superadmin
+    )
+
+    return JsonResponseDict(message=f"Successfully deleted '{deleted_role_name}' role")
+
+
 @roles_router.put(
     "/secondary/{role_id}",
     response_model=SecondaryRoleResponse,
@@ -182,7 +201,7 @@ async def assign_secondary_role(
         )
 
     await secondary_role_service.assign_role_to_user(
-        db=db, user_id=user_id, role_ids=data.role_ids, assigner_id=admin.id
+        db=db, user_id=user_id, role_ids=data.role_ids, assigner=admin
     )
 
     return JsonResponseDict(
@@ -197,7 +216,7 @@ async def assign_secondary_role(
     summary="Revoke secondary role from user",
 )
 async def revoke_secondary_role(
-    user_id: int,
+    user_id: str,
     role_id: int,
     bgt: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -206,6 +225,16 @@ async def revoke_secondary_role(
     """Revoke a secondary role from a user"""
 
     user_service.ensure_administrator(admin)
+
+    if not is_uuid(user_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User ID must be a valid UUID",
+        )
+
+    await secondary_role_service.revoke_role_from_user(
+        db=db, user_id=user_id, role_id=role_id, revoker=admin
+    )
 
     # Log the action
     # bgt.add_task(
@@ -223,7 +252,7 @@ async def revoke_secondary_role(
     "/secondary",
     response_model=List[SecondaryRoleResponse],
     status_code=status.HTTP_200_OK,
-    summary="List all secondary roles",
+    summary="List all available secondary roles",
 )
 async def list_secondary_roles(
     db: Session = Depends(get_db),
@@ -233,19 +262,38 @@ async def list_secondary_roles(
 
     user_service.ensure_administrator(admin)
 
-    pass
+    available_roles = await secondary_role_service.get_all_roles(db)
+
+    return JsonResponseDict(
+        message="Successfully fetched all available roles",
+        data=available_roles,
+    )
 
 
 @roles_router.get(
     "/user/{user_id}",
-    response_model=List[SecondaryRoleResponse],
+    # response_model=List[SecondaryRoleResponse],
     status_code=status.HTTP_200_OK,
     summary="Get user's secondary roles",
 )
 async def get_user_secondary_roles(
-    user_id: int,
+    user_id: str,
     db: Session = Depends(get_db),
     admin: User = Depends(user_service.get_current_user),
 ):
     """Get all secondary roles assigned to a user"""
-    pass
+
+    user_service.ensure_administrator(admin)
+    if not is_uuid(user_id):
+        raise HTTPException(detail="user id must be valid UUID")
+
+    user, user_roles = await secondary_role_service.fetch_roles_assigned_to_user(
+        db=db, user_id=user_id, request_user=admin
+    )
+
+    response = {
+        "user_id": user.id,
+        "roles": [role.to_dict(hide_creator=True) for role in user_roles],
+    }
+
+    return JsonResponseDict(message="successfully fetch user role(s)", data=response)
