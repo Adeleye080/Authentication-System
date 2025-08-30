@@ -9,6 +9,7 @@ from api.v1.routes.country_blacklist import country_blacklist_router
 from api.v1.routes.device import user_device_router
 from api.v1.routes.app_service import app_router
 from api.v1.routes.roles import roles_router
+from api.v1.routes.webhook import webhook_router
 
 
 api_version_one = APIRouter(prefix="/auth/api/v1")
@@ -23,3 +24,4 @@ api_version_one.include_router(user_device_router)
 api_version_one.include_router(audit_log_router)
 api_version_one.include_router(country_blacklist_router)
 api_version_one.include_router(app_router)
+api_version_one.include_router(webhook_router)
