@@ -11,7 +11,7 @@ from api.v1.schemas.main import ProbeServerResponse, HomeResponse
 from api.core.logging.logging_config import setup_logging
 from fastapi.templating import Jinja2Templates
 from api.utils.json_response import JsonResponseDict
-from api.utils.schedulers import scheduler  # type: ignore
+from api.utils.schedulers import scheduler
 from api.utils.settings import settings
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -51,8 +51,6 @@ app = FastAPI(
     },
     docs_url="/documentation",
     openapi_url=openapi_url,
-    # root_path="/api/auth",
-    # root_path_in_servers=False,
 )
 
 # CROSS-ORIGIN MIDDLEWARE
@@ -142,7 +140,7 @@ async def http_exception(request: Request, exc: HTTPException):
 
 
 @app.exception_handler(404)
-async def http_exception(request: Request, exc: HTTPException):
+async def not_found_exception(request: Request, exc: HTTPException):
     """HTTP exception handler"""
 
     return JsonResponseDict(
