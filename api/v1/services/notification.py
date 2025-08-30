@@ -232,7 +232,7 @@ class Notification:
     def send_account_update_notification(
         self, user: User, bgt: BackgroundTasks
     ) -> None:
-        """Notify users of changes they made on their account"""
+        """Notify users of the email changes they made on their account"""
 
         bgt.add_task(
             func=send_mail,
@@ -307,5 +307,23 @@ class Notification:
                 "ipAddress": login_ip_address,
                 "securityPageLink": settings.FRONTEND_HOME_URL.strip("/")
                 or settings.FRONTEND_DASHBOARD_URL.strip("/"),
+            },
+        )
+
+    def send_role_upgrade_email(
+        self, user_email: str, new_role: str, bgt: BackgroundTasks
+    ) -> None:
+        """Send email to notify user of their role upgrade"""
+
+        bgt.add_task(
+            func=send_mail,
+            recipient=user_email,
+            subject="Role Upgrade Notification",
+            template_name="role_upgrade_notification.html",
+            template_context={
+                "username": user_email,
+                "newRole": new_role,
+                "dashboardLink": settings.FRONTEND_DASHBOARD_URL.strip("/")
+                or settings.FRONTEND_HOME_URL.strip("/"),
             },
         )
