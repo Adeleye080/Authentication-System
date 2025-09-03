@@ -155,7 +155,8 @@ async def validation_exception(request: Request, exc: RequestValidationError):
     """Validation exception handler"""
 
     errors = [
-        {"loc": error["loc"], "msg": error["msg"], "type": error["type"]}
+        f'{error["msg"]}'
+        + f'{". location: " + str(error["loc"]) if error["loc"] else ""}'
         for error in exc.errors()
     ]
 
