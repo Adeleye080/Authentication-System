@@ -9,6 +9,7 @@ from api.v1.services.country_blacklists import CountryBlacklistService
 from api.v1.services.app_services import ApplicationService
 from api.v1.services.role_service import RoleService
 from api.v1.services.webhook import WebhookService
+from api.v1.services.attributes import AttributeService
 
 user_service = UserService()
 devices_service = DevicesService()
@@ -21,3 +22,4 @@ country_blacklist_service = CountryBlacklistService()
 application_service = ApplicationService()
 secondary_role_service = RoleService()
 webhook_service = WebhookService()
+attribute_service = AttributeService()
