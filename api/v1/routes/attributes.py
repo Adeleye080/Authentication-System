@@ -2,9 +2,14 @@ from fastapi import APIRouter, Depends, status, BackgroundTasks, HTTPException, 
 from sqlalchemy.orm import Session
 from db.database import get_db
 from api.v1.models.attributes import UserAttribute
-from api.v1.schemas.attributes import UserAttributeCreate
+from api.v1.schemas.attributes import UserAttributeCreate, AttributeAssignmentRequest
 from api.v1.models.user import User
-from api.v1.services import user_service, audit_log_service, notification_service
+from api.v1.services import (
+    user_service,
+    audit_log_service,
+    notification_service,
+    attribute_service,
+)
 from api.utils.json_response import JsonResponseDict
 
 # from api.v1.schemas.attributes import UserAttributeCreate, UserAttributeResponse
@@ -14,30 +19,44 @@ user_attrs_router = APIRouter(prefix="/attributes", tags=["User Attributes"])
 
 
 @user_attrs_router.post(
-    "/{user_id}",
+    "/new",
     # response_model=UserAttribute,
     status_code=status.HTTP_201_CREATED,
 )
-def create_user_attribute(
+async def create_new_attribute(
     data: UserAttributeCreate,
     db: Session = Depends(get_db),
-    user_id: str = Path(..., description="The ID of the user"),
     admin_user: User = Depends(user_service.get_current_user),
 ):
-    """Add new attribute to a user"""
+    """create a new attribute."""
 
-    user_service.ensure_administrator(admin_user)
+    user_service.ensure_superadmin(admin_user)
 
-    # attribute = UserAttribute(user_id=user_id, key=data.key, value=data.value)
+    await attribute_service.create_new(db=db, schema=data)
 
-    user_service.add_new_attribute_to_user(
-        db=db,
-        user_id=user_id,
-        key=data.key,
-        value=data.value,
+    return JsonResponseDict(message="Attribute has been created")
+
+
+@user_attrs_router.post("/assign/{user_id}")
+async def assign_attribute_to_user(
+    user_id: str,
+    data: AttributeAssignmentRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(user_service.get_current_user),
+):
+    """Assign attributes to a user"""
+
+    user_service.ensure_administrator(admin)
+
+    # user_obj = user_service.fetch_by_id(db=db, id=user_id)
+
+    await attribute_service.assign_attributes_to_user(
+        db=db, user_id=user_id, attrs_ass=data.assignments, assigner=admin
     )
 
-    return JsonResponseDict(message="Attribute has been added to user")
+    # Log this action in the audit logs
+
+    return JsonResponseDict(message="Attributes have been assigned to the user")
 
 
 @user_attrs_router.get(
@@ -45,7 +64,7 @@ def create_user_attribute(
     status_code=status.HTTP_200_OK,
     summary="Get self attributes",
 )
-def get_self_attributes(
+async def get_self_attributes(
     user: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -66,10 +85,10 @@ def get_self_attributes(
 
 
 @user_attrs_router.get(
-    "/{user_id}",
+    "/user/{user_id}",
     status_code=status.HTTP_200_OK,
 )
-def get_user_attributes(
+async def get_user_attributes(
     user_id: str = Path(..., description="The ID of the user"),
     db: Session = Depends(get_db),
     admin_user: User = Depends(user_service.get_current_user),
@@ -81,18 +100,19 @@ def get_user_attributes(
     attributes = user_service.get_user_attributes(db=db, user_id=user_id)
 
     return JsonResponseDict(
-        message="successfully retrieved user attributes", data=attributes
+        message="successfully retrieved user attributes",
+        data=attributes if attributes else "empty",
     )
 
 
 @user_attrs_router.delete(
-    "/{user_id}/{attribute_key}",
+    "/{attribute_id}/user/{user_id}",
     status_code=status.HTTP_200_OK,
 )
-def delete_user_attribute(
+async def delete_user_attribute(
     user_id: str = Path(..., description="The ID of the user"),
-    attribute_key: str = Path(
-        ..., description="The key/name of the attribute to delete"
+    attribute_id: int = Path(
+        ..., description="ID of the name of the attribute to delete"
     ),
     db: Session = Depends(get_db),
     admin_user: User = Depends(user_service.get_current_user),
@@ -101,6 +121,8 @@ def delete_user_attribute(
 
     user_service.ensure_administrator(admin_user)
 
-    user_service.delete_user_attribute(db=db, user_id=user_id, key=attribute_key)
+    user_service.delete_user_attribute(
+        db=db, user_id=user_id, attribute_id=attribute_id
+    )
 
     return JsonResponseDict(message="Attribute has been deleted successfully")
