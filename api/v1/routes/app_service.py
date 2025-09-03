@@ -12,7 +12,7 @@ from api.utils.json_response import JsonResponseDict
 from db.database import get_db
 
 
-app_router = APIRouter(prefix="/services", tags=["App Services"])
+app_router = APIRouter(prefix="/services", tags=["Service Registry"])
 
 
 @app_router.get(
