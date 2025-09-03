@@ -29,7 +29,7 @@ import datetime as dt
 logger = logging.getLogger(__name__)
 
 
-oauth2_router = APIRouter(prefix="/oauth2", tags=["OAuth2"])
+oauth2_router = APIRouter(prefix="/oauth2", tags=["Social Login"])
 
 
 @oauth2_router.get("/providers")
