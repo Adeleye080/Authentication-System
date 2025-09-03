@@ -13,6 +13,7 @@ from api.utils.settings import settings
 from api.v1.models.user import User
 from api.v1.models.refresh_token import RefreshToken
 from api.v1.models.attributes import UserAttribute
+from api.v1.models.account_ban_history import AccountBanHistory
 from api.v1.schemas.audit_logs import (
     AuditLogCreate,
     AuditLogEventEnum,
@@ -24,6 +25,7 @@ from api.v1.schemas.user import (
     DeactivateUserSchema,
     UserUpdateSchema,
     LoginSource,
+    BanHistoryStatusEnum,
 )
 from api.v1.schemas.roles import PrimaryRoleEnum
 from api.core.base.services import Service
@@ -393,6 +395,7 @@ class UserService(Service):
                 minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
             )
             data = {
+                "iss": settings.APP_URL or settings.APP_NAME or "Authentication System",
                 "sub": user_id,
                 "exp": expires,
                 "type": "access",
@@ -1038,22 +1041,23 @@ class UserService(Service):
         attributes = None
 
         if user_obj:
-            attributes = {attr.key: attr.value for attr in user_obj.attributes}
+            pass
         elif user_id:
-            user = db.query(User).filter(User.id == user_id).first()
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Auth user does not exist",
-                )
-            attributes = {attr.key: attr.value for attr in user.attributes}
+            user_obj = self.fetch_by_id(db=db, id=user_id)
+
+        attributes = {}
+        for user_attr_record in user_obj.attributes:
+            if user_attr_record.attribute and user_attr_record.attribute_value:
+                attribute_name = user_attr_record.attribute.name
+                attribute_value = user_attr_record.attribute_value.value
+                attributes[attribute_name] = attribute_value
 
         if not attributes:
             return {}
         return attributes
 
     def add_new_attribute_to_user(
-        db: Session, user_id: str, key: str, value: str
+        self, db: Session, user_id: str, key: str, value: str
     ) -> UserAttribute:
         """Associate new attribute to a user"""
 
@@ -1077,19 +1081,27 @@ class UserService(Service):
 
         return attr
 
-    def delete_user_attribute(self, db: Session, attribute_key: str, user_id: str):
+    def delete_user_attribute(self, db: Session, attribute_id: str, user_id: str):
         """Delete a user attribute"""
 
         try:
             db.query(UserAttribute).filter(
-                UserAttribute.user_id == user_id, UserAttribute.key == attribute_key
+                UserAttribute.user_id == user_id,
+                UserAttribute.attribute_id == attribute_id,
             ).delete()
-        except Exception:
+            db.commit()
+        except Exception as e:
+            print(e)
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="error deleting attribute",
             )
+
+    def delete_all_user_attributes(self, db: Session, user_id: str):
+        """Delete all attributes associated with a user"""
+
+        pass
 
     def restore_soft_deleted_user(self, db: Session, user_identifier: str) -> User:
         """
@@ -1131,7 +1143,10 @@ class UserService(Service):
 
         user = self.fetch_by_id(db=db, id=user_id)
         user.is_banned = True
-        user.save(db=db)
+
+        # add user to ban history
+        db.add(AccountBanHistory(status=BanHistoryStatusEnum.BANNED, reason=reason))
+        db.commit()
 
         return user
 
@@ -1140,7 +1155,10 @@ class UserService(Service):
 
         user = self.fetch_by_id(db=db, id=user_id)
         user.is_banned = False
-        user.save(db=db)
+
+        # add user ban status to history
+        db.add(AccountBanHistory(status=BanHistoryStatusEnum.LIFTED, reason=reason))
+        db.commit()
 
         return user
 
@@ -1160,7 +1178,7 @@ class UserService(Service):
 
         return True
 
-    def ensure_user_is_superadmin(
+    def ensure_superadmin(
         self, user: User, err_msg: str = None
     ) -> bool | HTTPException:
         """
@@ -1176,9 +1194,7 @@ class UserService(Service):
 
         return True
 
-    def ensure_user_is_moderator(
-        self, user: User, err_msg: str = None
-    ) -> bool | HTTPException:
+    def ensure_moderator(self, user: User, err_msg: str = None) -> bool | HTTPException:
         """
         validate to ensure user is a moderator.
         Raise HTTPexception otherwise.
