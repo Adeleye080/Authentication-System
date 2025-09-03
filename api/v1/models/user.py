@@ -30,7 +30,14 @@ class User(BaseModel):
         secondary=auth_user_roles_association,
         uselist=True,
     )
-    attributes = relationship("UserAttribute", backref="user", uselist=True)
+    attributes = relationship(
+        "UserAttribute",
+        backref="user",
+        uselist=True,
+        cascade="all, delete-orphan",
+        # I'm using 'selectin' to reduce the number of queries when loading user with attributes
+        lazy="selectin",
+    )
 
     refresh_tokens = relationship(
         "RefreshToken",
@@ -61,23 +68,27 @@ class User(BaseModel):
 
     def to_dict(self, hide_sensitive_data: bool = True):
         obj_dict = super().to_dict()
-        if obj_dict.get("password", False):
-            obj_dict.pop("password")
+        # remove password
+        obj_dict.pop("password", None)
 
         if hide_sensitive_data:
-            # hide all other sensitive data
-            if "login_initiated" in obj_dict.keys():
-                del obj_dict["login_initiated"]
-            if "is_deleted" in obj_dict.keys():
-                del obj_dict["is_deleted"]
-            if "is_moderator" in obj_dict.keys():
-                del obj_dict["is_moderator"]
-            if "is_superadmin" in obj_dict.keys():
-                del obj_dict["is_superadmin"]
-            if "secondary_role" in obj_dict.keys():
-                del obj_dict["secondary_role"]
-            if "is_banned" in obj_dict.keys():
-                del obj_dict["is_banned"]
+            obj_dict.pop("login_initiated", None)
+            obj_dict.pop("is_deleted", None)
+            obj_dict.pop("is_banned", None)
+
+        # 1. Add secondary roles
+        if self.secondary_roles:
+            obj_dict["secondary_roles"] = [role.name for role in self.secondary_roles]
+
+        # 2. Add attributes
+        if self.attributes:
+            attributes_dict = {}
+            for user_attr_record in self.attributes:
+                if user_attr_record.attribute and user_attr_record.attribute_value:
+                    attribute_name = user_attr_record.attribute.name
+                    attribute_value = user_attr_record.attribute_value.value
+                    attributes_dict[attribute_name] = attribute_value
+            obj_dict["attributes"] = attributes_dict
 
         return obj_dict
 
