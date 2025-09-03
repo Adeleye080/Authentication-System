@@ -88,7 +88,7 @@ class Settings(BaseSettings):
 
     # APP INFO
     APP_NAME: str = config("APP_NAME", default="FASTAPI AUTH SYSTEM")
-    APP_URL: str = config("APP_URL", default="fastapi-authsystem.example.com")
+    APP_URL: str = config("APP_URL", default="auth.fastapi-authsystem.com")
 
     FRONTEND_HOME_URL: str = config("FRONTEND_HOME_URL")
     FRONTEND_DASHBOARD_URL: str = config(
