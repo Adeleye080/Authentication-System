@@ -1,15 +1,20 @@
 from pydantic import BaseModel, Field
+from typing import Optional, List, Tuple
 
 
 class UserAttributeCreate(BaseModel):
-    key: str = Field(
-        ..., description="The key of the user attribute", examples=["department"]
+    name: str = Field(
+        ...,
+        description="The key of the user attribute",
+        examples=["department", "clearance_level"],
     )
-    value: str = Field(
-        ..., description="The value of the user attribute", examples=["Engineering"]
-    )
+    allowed_values: Optional[List[str]] = ["IT", "HR", "Finance", "Engineering", "..."]
 
 
 class UserAttributeResponse(BaseModel):
     id: str
     user_id: str
+
+
+class AttributeAssignmentRequest(BaseModel):
+    assignments: List[Tuple[int, int]] = [(2, 4)]
