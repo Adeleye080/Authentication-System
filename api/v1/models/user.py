@@ -77,6 +77,7 @@ class User(BaseModel):
             obj_dict.pop("is_banned", None)
 
         # 1. Add secondary roles
+        obj_dict["secondary_roles"] = []
         if self.secondary_roles:
             obj_dict["secondary_roles"] = [role.name for role in self.secondary_roles]
 
