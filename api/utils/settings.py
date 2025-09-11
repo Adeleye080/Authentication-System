@@ -40,7 +40,7 @@ class Settings(BaseSettings):
         "APP_SERVICE_TOKEN_EXPIRE_HOUR", cast=int, default=5
     )
     APP_SERVICE_KEYPAIR_ROTATION_MINUTES: int = config(
-        "APP_SERVICE_KEYPAIR_ROTATION_MINUTES", cast=int, default=1
+        "APP_SERVICE_KEYPAIR_ROTATION_MINUTES", cast=int, default=30
     )
     VERIFICATION_TOKEN_EXPIRATION_TIME: int = config(
         "VERIFICATION_TOKEN_EXPIRATION_TIME", cast=int, default=600
