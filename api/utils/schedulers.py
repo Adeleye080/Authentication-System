@@ -1,10 +1,12 @@
-"""Scheduler for background tasks.
+"""
+Scheduler for background tasks.
+
 This module uses APScheduler to schedule tasks such as downloading and updating the MaxMind GeoLite2 database,
-deleting expired and revoked refresh tokens, and deleting expired audit logs.
+deleting expired and revoked refresh tokens, deleting expired audit logs, etc.
 """
 
-from apscheduler.schedulers.background import BackgroundScheduler  # type: ignore
-from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor  # type: ignore
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 from sqlalchemy.exc import SQLAlchemyError
 import logging
 from datetime import datetime, timezone, timedelta
@@ -13,6 +15,7 @@ import os
 import requests
 import shutil
 from api.utils.settings import settings
+from api.utils.vault_utils import prune_old_keys
 from api.v1.models.mmdb import MMDB_TRACKER
 from api.v1.models.audit_logs import AuditLog
 
@@ -29,7 +32,7 @@ scheduler.configure(timezone=timezone.utc)
 logger = logging.getLogger(__name__)
 
 
-async def delete_revoked_and_expired_refresh_token():
+def delete_revoked_and_expired_refresh_token():
     """
     Asynchronously delete revoked and expired refresh tokens in batches
     """
@@ -162,6 +165,11 @@ def delete_expired_audit_logs():
         db_generator.close()
 
 
+# Add Jobs
 scheduler.add_job(download_and_update_geolite_db, "interval", days=3)
 scheduler.add_job(delete_revoked_and_expired_refresh_token, "interval", hours=1)
 scheduler.add_job(delete_expired_audit_logs, "interval", days=1)
+# automatically prune keys
+scheduler.add_job(
+    prune_old_keys, "interval", minutes=settings.APP_SERVICE_KEYPAIR_ROTATION_MINUTES
+)
