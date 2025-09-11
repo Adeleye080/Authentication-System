@@ -74,12 +74,12 @@ async def login(
 ):
     """Logs client in
 
-    **Client may be regular users, moderator of admin
-    **This endpoint is used to log in users using their email and password.
+    **Client may be regular users, moderator of admin**\n
+    This endpoint is used to log in users using their email and password.\n
     **Payload:**
 
-        - `email`
-        - `password`
+        email
+        password
     """
 
     try:
