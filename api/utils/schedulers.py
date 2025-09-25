@@ -88,7 +88,7 @@ def delete_revoked_and_expired_refresh_token():
         logger.error(f"Error deleting tokens: {e}")
         db.rollback()
     finally:
-        db.close()
+        db_generator.close()
 
 
 def download_and_update_geolite_db():
@@ -165,9 +165,25 @@ def delete_expired_audit_logs():
         db_generator.close()
 
 
+def delete_expired_temporary_token():
+    """Automatically deletes expired temporary token to free DB"""
+
+    curr_time = datetime.now(tz=timezone.utc)
+
+    db_generator = get_db()
+    db = next(db_generator)
+
+    try:
+        # delete expired temp token
+        pass
+    finally:
+        db_generator.close()
+
+
 # Add Jobs
 scheduler.add_job(download_and_update_geolite_db, "interval", days=3)
 scheduler.add_job(delete_revoked_and_expired_refresh_token, "interval", hours=1)
+scheduler.add_job(delete_expired_temporary_token, "interval", hours=2)
 scheduler.add_job(delete_expired_audit_logs, "interval", days=1)
 # automatically prune keys
 scheduler.add_job(
