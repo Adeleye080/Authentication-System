@@ -11,9 +11,15 @@ from api.v1.schemas.main import ProbeServerResponse, HomeResponse
 from api.core.logging.logging_config import setup_logging
 from fastapi.templating import Jinja2Templates
 from api.utils.json_response import JsonResponseDict
+from api.utils.vault_utils import (
+    rotate_service_signing_key,
+    prune_old_keys,
+    rotation_worker,
+)
 from api.utils.schedulers import scheduler
 from api.utils.settings import settings
 from starlette.middleware.sessions import SessionMiddleware
+import asyncio
 
 
 @asynccontextmanager
@@ -27,11 +33,25 @@ async def lifespan(app: FastAPI):
     scheduler.start()
     # Initiate GeoIP tracker
     MMDB_TRACKER()
+    # Genrate Service Apps RS256 Keypair
+    current_kid = await rotate_service_signing_key(app)
+    print(f"kid: {current_kid}")  # Dev debug
+    # Prune services keys on startup. system will autonatically prune thereafter
+    prune_old_keys()
+    # Automatic service keys rotation
+    app.state.service_keypair_rotation_task = asyncio.create_task(rotation_worker(app))
 
     yield
 
     # shutdown events
     scheduler.shutdown()
+    # stop keu rotation task
+    app.state.service_keypair_rotation_task.cancel()
+    try:
+        await app.state.service_keypair_rotation_task
+    except asyncio.CancelledError:
+        # This error is expected when cancelling the task
+        pass
 
 
 if settings.DEBUG_MODE:
