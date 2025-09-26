@@ -14,6 +14,7 @@ from api.v1.models.user import User
 from api.v1.models.refresh_token import RefreshToken
 from api.v1.models.attributes import UserAttribute
 from api.v1.models.account_ban_history import AccountBanHistory
+from api.v1.models.temp_tokens import TempToken
 from api.v1.schemas.audit_logs import (
     AuditLogCreate,
     AuditLogEventEnum,
@@ -300,6 +301,7 @@ class UserService(Service):
         from api.utils.encrypters_and_decrypters import decrypt_magic_link_token
 
         user_email = decrypt_magic_link_token(magic_token)
+        self.validate_temp_token_and_mark_as_used(db=db, token=magic_token)
         user = db.query(User).filter(User.email == user_email).first()
         if not user:
             raise HTTPException(status_code=404, detail="User does not exist")
@@ -1323,3 +1325,78 @@ class UserService(Service):
         target_user.save(db)
 
         return target_user
+
+    def fetch_user_ban_history(
+        self, db: Session, user_id: str
+    ) -> list[AccountBanHistory]:
+        """Fetch user account ban history"""
+
+        history = (
+            db.query(AccountBanHistory)
+            .filter(AccountBanHistory.user_id == user_id)
+            .order_by(AccountBanHistory.created_at.desc())
+            .all()
+        )
+
+        return history
+
+    def fetch_user_active_sessions(
+        self, db: Session, user_id: str
+    ) -> list[RefreshToken]:
+        """Fetch user active sessions"""
+
+        sessions = (
+            db.query(RefreshToken)
+            .filter(
+                RefreshToken.user_id == user_id,
+                RefreshToken.revoked == False,
+                RefreshToken.expires_at > dt.datetime.now(dt.timezone.utc),
+            )
+            .order_by(RefreshToken.created_at.desc())
+            .all()
+        )
+
+        return sessions
+
+    def fetch_user_temp_tokens(
+        self, db: Session, user_identifier: str
+    ) -> list[TempToken]:
+        """Fetch user temporary tokens"""
+
+        tokens = (
+            db.query(TempToken)
+            .filter(TempToken.user_identifier == user_identifier)
+            .order_by(TempToken.expires_at.desc())
+            .all()
+        )
+
+        return tokens
+
+    def fetch_temp_token(self, db: Session, token: str) -> TempToken | None:
+        """Fetch a temporary token by its token string"""
+
+        temp_token = db.query(TempToken).filter(TempToken.token == token).first()
+
+        return temp_token
+
+    def validate_temp_token_and_mark_as_used(self, db: Session, token: str) -> None:
+        """
+        Validates that a temporary token is unused. raise HTTPError if token has been previously used.
+        """
+
+        temp_token = self.fetch_temp_token(db=db, token=token)
+
+        if not temp_token:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Token not found"
+            )
+
+        if temp_token.used:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Token has already been used",
+            )
+
+        # mark token as used
+        temp_token.used = True
+        temp_token.save(db=db)
