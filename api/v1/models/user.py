@@ -51,6 +51,9 @@ class User(BaseModel):
     totp_device = relationship(
         "TOTPDevice", backref="user", uselist=False, cascade="all, delete-orphan"
     )
+    ban_history = relationship(
+        "AccountBanHistory", backref="user", uselist=True, cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         Index("ix_user_email", "email"),
