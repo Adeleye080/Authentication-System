@@ -520,6 +520,8 @@ async def reset_password(
 
     # decrypt token
     user_email = decrypt_password_reset_token(token)
+    # token is authentic, validate if it's been previously used.
+    user_service.validate_temp_token_and_mark_as_used(db=db, token=token)
 
     # check if user exists
     user = user_service.fetch(db=db, email=user_email)
@@ -649,6 +651,8 @@ async def verify_email(
     from api.utils.encrypters_and_decrypters import decrypt_verification_token
 
     user_email = decrypt_verification_token(token)
+    # token was successfully verified and decrypted (authentic), check token use status
+    user_service.validate_temp_token_and_mark_as_used(db=db, token=token)
 
     user = user_service.fetch(db=db, email=user_email)
 
@@ -767,6 +771,8 @@ async def verify_email_code(
 
     # Decrypt the temporary token
     user_id = decrypt_email_otp_login_temp_token(req_data.temp_token)
+    # token is authentic, verify it is only used once
+    user_service.validate_temp_token_and_mark_as_used(db=db, token=req_data.temp_token)
 
     # Verify the OTP code
     is_valid_code = totp_service.verify_email_otp_code(
