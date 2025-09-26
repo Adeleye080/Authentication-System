@@ -10,6 +10,7 @@ from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 from sqlalchemy.exc import SQLAlchemyError
 import logging
 from datetime import datetime, timezone, timedelta
+from api.v1.models.temp_tokens import TempToken
 from db.database import get_db
 import os
 import requests
@@ -161,6 +162,19 @@ def delete_expired_audit_logs():
         db.query(AuditLog).filter(AuditLog.timestamp > life_time).delete(
             synchronize_session=False
         )
+        db.commit()
+    except TypeError:
+        db.rollback()
+        try:
+            # TypeError can occur if timestamp is not offset-aware
+            life_time = datetime.now() + timedelta(days=settings.AUDIT_LOGS_LIFETIME)
+            db.query(AuditLog).filter(AuditLog.timestamp > life_time).delete(
+                synchronize_session=False
+            )
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            logger.exception("Error deleting expired audit logs")
     finally:
         db_generator.close()
 
@@ -168,14 +182,29 @@ def delete_expired_audit_logs():
 def delete_expired_temporary_token():
     """Automatically deletes expired temporary token to free DB"""
 
-    curr_time = datetime.now(tz=timezone.utc)
+    curr_time1 = datetime.now(tz=timezone.utc)
+    curr_time2 = datetime.now()
 
     db_generator = get_db()
     db = next(db_generator)
 
     try:
         # delete expired temp token
-        pass
+        db.query(TempToken).filter(TempToken.expires_at < curr_time1).delete(
+            synchronize_session=False
+        )
+        db.commit()
+    except TypeError:
+        db.rollback()
+        try:
+            # TypeError can occur if expires_at is not offset-aware
+            db.query(TempToken).filter(TempToken.expires_at < curr_time2).delete(
+                synchronize_session=False
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Error deleting expired temporary tokens")
     finally:
         db_generator.close()
 
