@@ -15,3 +15,4 @@ class AccountBanHistory(Base):
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=True
     )
+    user_id = Column(Integer, ForeignKey("auth_users.id"), nullable=False)
