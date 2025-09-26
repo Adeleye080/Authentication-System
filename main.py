@@ -30,7 +30,8 @@ async def lifespan(app: FastAPI):
     # setup application level log
     setup_logging()
     # setup and register schedulers
-    scheduler.start()
+    if not scheduler.running:
+        scheduler.start()
     # Initiate GeoIP tracker
     MMDB_TRACKER()
     # Genrate Service Apps RS256 Keypair
@@ -43,9 +44,10 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # shutdown events
-    scheduler.shutdown()
-    # stop keu rotation task
+    # SHUTDOWN EVENTS
+    # shutdown scheduler
+    scheduler.shutdown(wait=False)
+    # stop key rotation task
     app.state.service_keypair_rotation_task.cancel()
     try:
         await app.state.service_keypair_rotation_task
