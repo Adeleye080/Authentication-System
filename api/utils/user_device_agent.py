@@ -34,6 +34,8 @@ async def get_device_info(request: Request) -> dict:
         device_name = f"{device_info.device.family} - {device_info.os.family}"
         os_name = device_info.os.family
         os_version = device_info.os.version[:2]
+        if isinstance(os_version, tuple):
+            os_version = ".".join(str(part) for part in os_version[:2]) or "0.0"
         is_mobile = device_info.is_mobile
         is_tablet = device_info.is_tablet
         is_pc = device_info.is_pc
