@@ -821,8 +821,6 @@ async def verify_email_code(
     # since alert is sent to their email
     devices_service.create_with_bgt(db=db, owner=user, device_info=device_info, bgt=bgt)
 
-    user.email  # load object attrs
-
     response = auth_response(
         status="success",
         status_code=200,
