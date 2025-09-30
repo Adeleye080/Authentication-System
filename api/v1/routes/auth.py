@@ -55,7 +55,7 @@ from api.v1.services import (
     geoip_service,
     totp_service,
 )
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 
 auth_router = APIRouter(tags=["Auth"])
@@ -74,12 +74,12 @@ async def login(
 ):
     """Logs client in
 
-    **Client may be regular users, moderator of admin
-    **This endpoint is used to log in users using their email and password.
+    **Client may be regular users, moderator of admin**\n
+    This endpoint is used to log in users using their email and password.\n
     **Payload:**
 
-        - `email`
-        - `password`
+        email
+        password
     """
 
     try:
@@ -185,22 +185,17 @@ async def login(
 
     # set cookies
     if settings.ALLOW_AUTH_COOKIES:
-        response.set_cookie(
-            key="access_token",
-            value=user_access_token,
-            httponly=True,
-            secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        JWT_REFRESH_EXPIRY_SECONDS = int(
+            timedelta(days=settings.JWT_REFRESH_EXPIRY_DAYS).total_seconds()
         )
-
         response.set_cookie(
             key="refresh_token",
             value=user_refresh_token,
             httponly=True,
             secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.JWT_REFRESH_EXPIRY,
+            samesite=settings.AUTH_COOKIE_SAME_SITE,
+            path=request.url_for("refresh").path,
+            expires=JWT_REFRESH_EXPIRY_SECONDS,
         )
 
     # audit log
@@ -331,22 +326,17 @@ async def magic_link_login(
     )
 
     if settings.ALLOW_AUTH_COOKIES:
-        response.set_cookie(
-            key="access_token",
-            value=user_access_token,
-            httponly=True,
-            secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        JWT_REFRESH_EXPIRY_SECONDS = int(
+            timedelta(days=settings.JWT_REFRESH_EXPIRY_DAYS).total_seconds()
         )
-
         response.set_cookie(
             key="refresh_token",
             value=user_refresh_token,
             httponly=True,
             secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.JWT_REFRESH_EXPIRY,
+            samesite=settings.AUTH_COOKIE_SAME_SITE,
+            path=request.url_for("refresh").path,
+            expires=JWT_REFRESH_EXPIRY_SECONDS,  # set to days equivalent in seconds
         )
 
         # loging the event in audit logs
@@ -368,11 +358,15 @@ async def magic_link_login(
 
 @auth_router.post("/logout", status_code=status.HTTP_200_OK)
 async def logout(
-    refresh_token_schema: RefreshTokenRequest, db: Session = Depends(get_db)
+    refresh_token_schema: RefreshTokenRequest,
+    request: Request,
+    db: Session = Depends(get_db),
 ):
     """Logs user out of the system"""
 
-    refresh_token = refresh_token_schema.refresh_token
+    refresh_token = refresh_token_schema.refresh_token or request.cookies.get(
+        settings.REFRESH_TOKEN_COOKIE_NAME
+    )
     if refresh_token:
         try:
             user_service.revoke_refresh_token(db=db, token=refresh_token)
@@ -410,13 +404,22 @@ async def refresh(
 ):
     """Refreshes user token"""
 
+    refresh_token = refresh_token_schema.refresh_token or request.cookies.get(
+        settings.REFRESH_TOKEN_COOKIE_NAME
+    )
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Refresh token is required (either in request body or cookies)",
+        )
+
     device_info = await get_device_info(request)
 
     curr_device_fprt = generate_device_fingerprint(device_info.get("user_agent"))
 
-    new_access_token, new_refresh_token = user_service.refresh_access_token(
+    new_access_token, new_refresh_token, user = user_service.refresh_access_token(
         db,
-        refresh_token_schema.refresh_token,
+        refresh_token,
         current_device_fingerprint=curr_device_fprt,
     )
 
@@ -429,16 +432,6 @@ async def refresh(
             "refresh": new_refresh_token,
         },
     )
-
-    # user info
-    user = user_service.get_user_object_using_refresh_token(
-        refresh_token=refresh_token_schema.refresh_token, db=db
-    )
-    # user device info
-    if device_info:
-        devices_service.create_with_bgt(
-            db=db, owner=user, device_info=device_info, bgt=bgt
-        )
 
     # loging the event in audit logs
     audit_log_service.log(
@@ -456,22 +449,17 @@ async def refresh(
 
     # perform other logic such as setting cookies
     if settings.ALLOW_AUTH_COOKIES:
-        response.set_cookie(
-            key="access_token",
-            value=new_access_token,
-            httponly=True,
-            secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        JWT_REFRESH_EXPIRY_SECONDS = int(
+            timedelta(days=settings.JWT_REFRESH_EXPIRY_DAYS).total_seconds()
         )
-
         response.set_cookie(
             key="refresh_token",
             value=new_refresh_token,
             httponly=True,
             secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.JWT_REFRESH_EXPIRY,
+            samesite=settings.AUTH_COOKIE_SAME_SITE,
+            path="/auth/api/v1/",
+            expires=JWT_REFRESH_EXPIRY_SECONDS,
         )
 
     return response
@@ -520,6 +508,8 @@ async def reset_password(
 
     # decrypt token
     user_email = decrypt_password_reset_token(token)
+    # token is authentic, validate if it's been previously used.
+    user_service.validate_temp_token_and_mark_as_used(db=db, token=token)
 
     # check if user exists
     user = user_service.fetch(db=db, email=user_email)
@@ -649,6 +639,8 @@ async def verify_email(
     from api.utils.encrypters_and_decrypters import decrypt_verification_token
 
     user_email = decrypt_verification_token(token)
+    # token was successfully verified and decrypted (authentic), check token use status
+    user_service.validate_temp_token_and_mark_as_used(db=db, token=token)
 
     user = user_service.fetch(db=db, email=user_email)
 
@@ -767,6 +759,8 @@ async def verify_email_code(
 
     # Decrypt the temporary token
     user_id = decrypt_email_otp_login_temp_token(req_data.temp_token)
+    # token is authentic, verify it is only used once
+    user_service.validate_temp_token_and_mark_as_used(db=db, token=req_data.temp_token)
 
     # Verify the OTP code
     is_valid_code = totp_service.verify_email_otp_code(
@@ -815,8 +809,6 @@ async def verify_email_code(
     # since alert is sent to their email
     devices_service.create_with_bgt(db=db, owner=user, device_info=device_info, bgt=bgt)
 
-    user.email  # load object attrs
-
     response = auth_response(
         status="success",
         status_code=200,
@@ -828,22 +820,17 @@ async def verify_email_code(
 
     # set cookies
     if settings.ALLOW_AUTH_COOKIES:
-        response.set_cookie(
-            key="access_token",
-            value=access_token,
-            httponly=True,
-            secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        JWT_REFRESH_EXPIRY_SECONDS = int(
+            timedelta(days=settings.JWT_REFRESH_EXPIRY_DAYS).total_seconds()
         )
-
         response.set_cookie(
             key="refresh_token",
             value=user_refresh_token,
             httponly=True,
             secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.JWT_REFRESH_EXPIRY,
+            samesite=settings.AUTH_COOKIE_SAME_SITE,
+            path=request.url_for("refresh").path,
+            expires=JWT_REFRESH_EXPIRY_SECONDS,
         )
 
     # audit log

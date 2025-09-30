@@ -347,7 +347,18 @@ class GeoIPService:
                 + "\033[0m",
                 flush=True,
             )
-            return
+            return GeoIPResult(
+                ip_address="localhost",
+                country_name="N/A",
+                country_code="N/A",
+                region="N/A",
+                city="N/A",
+                timezone="N/A",
+                continent_name="N/A",
+                continent_code="N/A",
+                success=True,
+                source="N/A",
+            )
 
         try:
             result = self.get_geolocation_with_fallback(ip_address=ip_address)

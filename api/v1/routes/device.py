@@ -50,15 +50,12 @@ async def delete_self_device(
 )
 def get_user_devices_by_user_id(
     user_id: str = Path(..., description="ID of the owner of the device"),
-    moderator_superadmin: User = Depends(user_service.get_current_user),
+    admin: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get all devices belonging to a user"""
 
-    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
-        )
+    user_service.ensure_administrator(admin)
 
     user_devices = user_service.fetch_by_id(db=db, id=user_id).devices
     user_devices = [

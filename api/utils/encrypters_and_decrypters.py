@@ -2,6 +2,7 @@ from cryptography.fernet import Fernet
 from pydantic import EmailStr
 from api.utils.settings import settings
 from api.utils.validators import is_email, is_uuid
+from api.v1.models.temp_tokens import TempToken
 from fastapi import HTTPException, status
 from datetime import datetime, timedelta, timezone
 import json
@@ -38,6 +39,13 @@ def generate_user_verification_token(user_email: EmailStr) -> str:
 
     encrypted_data = cipher_suite.encrypt(json_data.encode())
     encoded_encrypted_data = base64.urlsafe_b64encode(encrypted_data).decode()
+
+    reg_token = TempToken(
+        token=encoded_encrypted_data,
+        user_identifier=user_email,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+    )
+    reg_token.save()
 
     return encoded_encrypted_data
 
@@ -87,6 +95,12 @@ def generate_magic_link_token(email: EmailStr, validity: int = 10):
     magic_link_token = base64.urlsafe_b64encode(
         cipher_suite.encrypt(token_data.encode())
     ).decode()
+
+    TempToken(
+        token=magic_link_token,
+        user_identifier=email,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=validity),
+    ).save()
 
     return magic_link_token
 
@@ -141,6 +155,12 @@ def generate_password_reset_token(email: EmailStr, validity: int = 30) -> str:
         cipher_suite.encrypt(token_data.encode())
     ).decode()
 
+    TempToken(
+        token=password_reset_token,
+        user_identifier=email,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=validity),
+    ).save()
+
     return password_reset_token
 
 
@@ -184,6 +204,13 @@ def generate_email_otp_login_temp_token(user_id: str, validity: int = 10) -> str
     temp_token = base64.urlsafe_b64encode(
         cipher_suite.encrypt(token_data.encode())
     ).decode()
+
+    # save token
+    TempToken(
+        token=temp_token,
+        user_identifier=user_id,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=validity),
+    ).save()
 
     return temp_token
 

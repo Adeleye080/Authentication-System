@@ -90,9 +90,12 @@ class DevicesService:
         device_info["user_agent_string"] = device_info.pop("user_agent")
 
         device = Device(**device_info)
-        db.add(device)
-        db.commit()
-        db.refresh(device)
+        try:
+            db.add(device)
+            db.commit()
+        except Exception as e:
+            print(f"Debug: error when saving new device: {e}")
+            db.rollback()
         return device
 
     def create_with_bgt(

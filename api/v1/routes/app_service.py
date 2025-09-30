@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from api.v1.models.user import User
 from api.v1.services import application_service, user_service
@@ -9,10 +10,11 @@ from api.v1.schemas.app_service import (
     ServiceAuthRequest,
 )
 from api.utils.json_response import JsonResponseDict
+from api.utils.vault_utils import load_public_keys, pem_to_jwk
 from db.database import get_db
 
 
-app_router = APIRouter(prefix="/services", tags=["App Services"])
+app_router = APIRouter(prefix="/services", tags=["Service Registry"])
 
 
 @app_router.get(
@@ -125,3 +127,13 @@ async def delete_a_service(
         message=f"deleted service app ({deleted_app.name}) successfully",
         status_code=status.HTTP_200_OK,
     )
+
+
+@app_router.get("/.well-known/jwks.json")
+async def get_JSON_Web_keys():
+    """
+    Get JSON Web Keys
+    """
+    keys = await load_public_keys()
+    jwks = {"keys": [await pem_to_jwk(pem, kid) for kid, pem in keys.items()]}
+    return jwks

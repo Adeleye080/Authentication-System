@@ -46,7 +46,10 @@ class JsonResponseDict(JSONResponse):
         )
 
     def response(self):
-        """Return a json response dictionary"""
+        """
+        Return a json response dictionary. set status to success, failed or error based on status code.
+        you can set data to 'empty' to return an empty data object, or set data to None or {} to remove data from response
+        """
         if self.status_code < 300:
             response_dict = {
                 "message": self.message,
@@ -59,6 +62,9 @@ class JsonResponseDict(JSONResponse):
                 if self.data is None or self.data == {}
                 else None
             )
+            if self.data == ["empty"] or self.data == "empty":
+                response_dict["data"] = {}
+
             return response_dict
 
         elif self.status_code == 401:

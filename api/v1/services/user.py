@@ -1,17 +1,21 @@
-from fastapi import HTTPException, Depends, Request, status, Security
+from fastapi import HTTPException, Depends, status, Security, Header
+from starlette.requests import Request
 from fastapi.security import OAuth2PasswordBearer
-from passlib.context import CryptContext  # type: ignore
+from passlib.context import CryptContext
 from typing import Tuple, Optional, List
 from pydantic import EmailStr
 from sqlalchemy.orm import Session
 import datetime as dt
-from jose import JWTError, jwt, ExpiredSignatureError  # type: ignore
+from jose import JWTError, jwt, ExpiredSignatureError
 from sqlalchemy import func
 from db.database import get_db
 
 from api.utils.settings import settings
 from api.v1.models.user import User
 from api.v1.models.refresh_token import RefreshToken
+from api.v1.models.attributes import UserAttribute
+from api.v1.models.account_ban_history import AccountBanHistory
+from api.v1.models.temp_tokens import TempToken
 from api.v1.schemas.audit_logs import (
     AuditLogCreate,
     AuditLogEventEnum,
@@ -23,7 +27,9 @@ from api.v1.schemas.user import (
     DeactivateUserSchema,
     UserUpdateSchema,
     LoginSource,
+    BanHistoryStatusEnum,
 )
+from api.v1.schemas.roles import PrimaryRoleEnum
 from api.core.base.services import Service
 from api.utils.encrypters_and_decrypters import base64, cipher_suite
 import logging
@@ -296,6 +302,7 @@ class UserService(Service):
         from api.utils.encrypters_and_decrypters import decrypt_magic_link_token
 
         user_email = decrypt_magic_link_token(magic_token)
+        self.validate_temp_token_and_mark_as_used(db=db, token=magic_token)
         user = db.query(User).filter(User.email == user_email).first()
         if not user:
             raise HTTPException(status_code=404, detail="User does not exist")
@@ -377,7 +384,7 @@ class UserService(Service):
         """Function to create access token"""
 
         try:
-            secondary_role = user_obj.secondary_role
+            secondary_roles = [role.name for role in user_obj.secondary_roles]
             user_id = user_obj.id
 
             # define user role
@@ -391,11 +398,12 @@ class UserService(Service):
                 minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
             )
             data = {
+                "iss": settings.APP_URL or settings.APP_NAME or "Authentication System",
                 "sub": user_id,
                 "exp": expires,
                 "type": "access",
                 "primary_role": user_role,
-                "secondary_role": secondary_role,
+                "secondary_roles": secondary_roles,
             }
 
             attributes = self.get_user_attributes(db=db, user_obj=user_obj)
@@ -425,7 +433,7 @@ class UserService(Service):
         """
 
         expires = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
-            days=settings.JWT_REFRESH_EXPIRY
+            days=settings.JWT_REFRESH_EXPIRY_DAYS
         )
         data = {"sub": user_id, "exp": expires, "type": "refresh"}
         if user_device_fingerprint:
@@ -638,7 +646,9 @@ class UserService(Service):
     ) -> Tuple[str, str]:
         """
         Function to generate new access token and rotate refresh token.
-        Revokes current refresh token
+        Revokes current refresh token.
+
+        Return (access_token, refresh_token, user)
         """
 
         credentials_exception = HTTPException(
@@ -687,7 +697,7 @@ class UserService(Service):
                 user_device_fingerprint=current_device_fingerprint,
             )
 
-            return (access, refresh)
+            return (access, refresh, owner)
 
     def get_user_object_using_refresh_token(
         self, refresh_token: str, db: Session
@@ -730,7 +740,9 @@ class UserService(Service):
         return owner
 
     def get_current_user(
-        self, access_token: str = Security(oauth2_scheme), db: Session = Depends(get_db)
+        self,
+        access_token: str = Security(oauth2_scheme),
+        db: Session = Depends(get_db),
     ) -> User:
         """
         Dependency to get current logged in user.
@@ -758,7 +770,9 @@ class UserService(Service):
         return user
 
     def get_current_superadmin(
-        self, access_token: str = Security(oauth2_scheme), db: Session = Depends(get_db)
+        self,
+        access_token: str = Security(oauth2_scheme),
+        db: Session = Depends(get_db),
     ):
         """Dependency to get current superadmin user"""
         try:
@@ -788,7 +802,9 @@ class UserService(Service):
         return user
 
     def get_current_moderator(
-        self, access_token: str = Security(oauth2_scheme), db: Session = Depends(get_db)
+        self,
+        access_token: str = Security(oauth2_scheme),
+        db: Session = Depends(get_db),
     ):
         """Dependency to get current moderator user"""
         try:
@@ -982,7 +998,9 @@ class UserService(Service):
 
         return encoded_encrypted_token
 
-    def decrypt_and_validate_temp_login_token(self, token: str, current_ip: str) -> str:
+    def decrypt_and_validate_2fa_temp_login_token(
+        self, token: str, current_ip: str
+    ) -> str:
         """
         Decrypt and validate temporary login token. \n
         Return owner ID if valid, raise HTTPException otherwise
@@ -1030,20 +1048,71 @@ class UserService(Service):
 
         if not any([user_obj, user_id]):
             raise ValueError("User ID or User Object must be given")
+
+        attributes = None
+
         if user_obj:
-            attributes = {attr.key: attr.value for attr in user_obj.attributes}
+            pass
         elif user_id:
-            user = db.query(User).filter(User.id == user_id).first()
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Auth user does not exist",
-                )
-            attributes = {attr.key: attr.value for attr in user.attributes}
+            user_obj = self.fetch_by_id(db=db, id=user_id)
+
+        attributes = {}
+        for user_attr_record in user_obj.attributes:
+            if user_attr_record.attribute and user_attr_record.attribute_value:
+                attribute_name = user_attr_record.attribute.name
+                attribute_value = user_attr_record.attribute_value.value
+                attributes[attribute_name] = attribute_value
 
         if not attributes:
             return {}
         return attributes
+
+    def add_new_attribute_to_user(
+        self, db: Session, user_id: str, key: str, value: str
+    ) -> UserAttribute:
+        """Associate new attribute to a user"""
+
+        key, value = key.lower(), value.lower()
+
+        attr_exist = (
+            db.query(UserAttribute)
+            .filter(UserAttribute.key == key, UserAttribute.user_id == user_id)
+            .first()
+        )
+        if attr_exist:
+            raise HTTPException(
+                detail=f"user already have attribute '{key}'",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        attr = UserAttribute(user_id=user_id, key=key, value=value)
+
+        db.add(attr)
+        db.commit()
+
+        return attr
+
+    def delete_user_attribute(self, db: Session, attribute_id: str, user_id: str):
+        """Delete a user attribute"""
+
+        try:
+            db.query(UserAttribute).filter(
+                UserAttribute.user_id == user_id,
+                UserAttribute.attribute_id == attribute_id,
+            ).delete()
+            db.commit()
+        except Exception as e:
+            print(e)
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="error deleting attribute",
+            )
+
+    def delete_all_user_attributes(self, db: Session, user_id: str):
+        """Delete all attributes associated with a user"""
+
+        pass
 
     def restore_soft_deleted_user(self, db: Session, user_identifier: str) -> User:
         """
@@ -1085,7 +1154,10 @@ class UserService(Service):
 
         user = self.fetch_by_id(db=db, id=user_id)
         user.is_banned = True
-        user.save(db=db)
+
+        # add user to ban history
+        db.add(AccountBanHistory(status=BanHistoryStatusEnum.BANNED, reason=reason))
+        db.commit()
 
         return user
 
@@ -1094,6 +1166,247 @@ class UserService(Service):
 
         user = self.fetch_by_id(db=db, id=user_id)
         user.is_banned = False
-        user.save(db=db)
+
+        # add user ban status to history
+        db.add(AccountBanHistory(status=BanHistoryStatusEnum.LIFTED, reason=reason))
+        db.commit()
 
         return user
+
+    def ensure_administrator(
+        self, user: User, err_msg: str = None
+    ) -> bool | HTTPException:
+        """
+        validate to ensure user is a moderator or superadmin.
+        Raise HTTPexception otherwise.
+        """
+
+        if not any([user.is_superadmin, user.is_moderator]):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=err_msg or "Not enough permissions.",
+            )
+
+        return True
+
+    def ensure_superadmin(
+        self, user: User, err_msg: str = None
+    ) -> bool | HTTPException:
+        """
+        validate to ensure user is a superadmin.
+        Raise HTTPexception otherwise.
+        """
+
+        if not user.is_superadmin:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=err_msg or "Not enough permissions.",
+            )
+
+        return True
+
+    def ensure_moderator(self, user: User, err_msg: str = None) -> bool | HTTPException:
+        """
+        validate to ensure user is a moderator.
+        Raise HTTPexception otherwise.
+        """
+
+        if not user.is_moderator:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=err_msg or "Not enough permissions.",
+            )
+
+        return True
+
+    def upgrade_user_primary_role(
+        self, db: Session, user_id: str, new_role: str, assigner_id: str
+    ) -> User:
+        """
+        Upgrade a user's primary role.
+
+        :param db: Database Session
+        :param user_id: ID of the user to be upgraded
+        :param new_role: Role to assign to user
+        :param assigner_id: ID of the admin performing the upgrade
+        """
+
+        # Prevent self-role changes
+        if user_id == assigner_id:
+            raise HTTPException(
+                detail="You cannot modify your own role.",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        if new_role == PrimaryRoleEnum.USER:
+            raise HTTPException(
+                detail="Invalid role upgrade. Cannot upgrade to 'user' role.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        target_user = self.fetch_by_id(db=db, id=user_id)
+
+        if not target_user.is_moderator and not target_user.is_superadmin:
+            if new_role == PrimaryRoleEnum.MODERATOR:
+                target_user.is_moderator = True
+            elif new_role == PrimaryRoleEnum.SUPERADMIN:
+                target_user.is_superadmin = True
+
+        elif target_user.is_moderator:
+            if new_role == PrimaryRoleEnum.MODERATOR:
+                raise HTTPException(
+                    detail=f"User already has the '{PrimaryRoleEnum.MODERATOR}' role",
+                    status_code=status.HTTP_409_CONFLICT,
+                )
+            elif new_role == PrimaryRoleEnum.SUPERADMIN:
+                target_user.is_moderator = False
+                target_user.is_superadmin = True
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot upgrade role further",
+            )
+
+        # save the changes
+        target_user.save(db=db)
+
+        return target_user
+
+    def downgrade_user_primary_role(
+        self, db: Session, user_id: str, new_role: str, assigner_id: str
+    ) -> User:
+        """
+        Downgrade a user's primary role
+
+        :param db: Database Session
+        :param user_id: ID of the user to be downgraded
+        :param new_role: Role to assign to user
+        :param assigner_id: ID of the admin performing the downgrade
+        """
+
+        # Prevent self-role changes
+        if user_id == assigner_id:
+            raise HTTPException(
+                detail="You cannot modify your own role.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if new_role == PrimaryRoleEnum.SUPERADMIN:
+            raise HTTPException(
+                detail="Invalid role downgrade. Cannot downgrade to 'superadmin' role.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        target_user = self.fetch_by_id(db=db, id=user_id)
+
+        if target_user.is_superadmin:
+            # check to see if there is at least one other superadmin
+            superadmin_count = (
+                db.query(User)
+                .filter(User.is_superadmin == True)
+                .filter(User.id != user_id)
+                .count()
+            )
+            if superadmin_count == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot downgrade. at least one superadmin must remain in the system.",
+                )
+            if new_role == PrimaryRoleEnum.MODERATOR:
+                target_user.is_superadmin = False
+                target_user.is_moderator = True
+            elif new_role == PrimaryRoleEnum.USER:
+                target_user.is_superadmin = False
+        elif target_user.is_moderator:
+            if new_role == PrimaryRoleEnum.USER:
+                target_user.is_moderator = False
+            elif new_role == PrimaryRoleEnum.MODERATOR:
+                raise HTTPException(
+                    detail="User already has the 'moderator' role",
+                    status_code=status.HTTP_409_CONFLICT,
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot downgrade role further",
+            )
+
+        target_user.save(db)
+
+        return target_user
+
+    def fetch_user_ban_history(
+        self, db: Session, user_id: str
+    ) -> list[AccountBanHistory]:
+        """Fetch user account ban history"""
+
+        history = (
+            db.query(AccountBanHistory)
+            .filter(AccountBanHistory.user_id == user_id)
+            .order_by(AccountBanHistory.created_at.desc())
+            .all()
+        )
+
+        return history
+
+    def fetch_user_active_sessions(
+        self, db: Session, user_id: str
+    ) -> list[RefreshToken]:
+        """Fetch user active sessions"""
+
+        sessions = (
+            db.query(RefreshToken)
+            .filter(
+                RefreshToken.user_id == user_id,
+                RefreshToken.revoked == False,
+                RefreshToken.expires_at > dt.datetime.now(dt.timezone.utc),
+            )
+            .order_by(RefreshToken.created_at.desc())
+            .all()
+        )
+
+        return sessions
+
+    def fetch_user_temp_tokens(
+        self, db: Session, user_identifier: str
+    ) -> list[TempToken]:
+        """Fetch user temporary tokens"""
+
+        tokens = (
+            db.query(TempToken)
+            .filter(TempToken.user_identifier == user_identifier)
+            .order_by(TempToken.expires_at.desc())
+            .all()
+        )
+
+        return tokens
+
+    def fetch_temp_token(self, db: Session, token: str) -> TempToken | None:
+        """Fetch a temporary token by its token string"""
+
+        temp_token = db.query(TempToken).filter(TempToken.token == token).first()
+
+        return temp_token
+
+    def validate_temp_token_and_mark_as_used(self, db: Session, token: str) -> None:
+        """
+        Validates that a temporary token is unused. raise HTTPError if token has been previously used.
+        Marks the token as used since validating means it's being used.
+        """
+
+        temp_token = self.fetch_temp_token(db=db, token=token)
+
+        if not temp_token:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Token not found"
+            )
+
+        if temp_token.used:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Token has already been used",
+            )
+
+        # mark token as used
+        temp_token.used = True
+        temp_token.save(db=db)

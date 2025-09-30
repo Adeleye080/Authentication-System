@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from fastapi.responses import RedirectResponse
-from authlib.integrations.starlette_client import OAuth  # type: ignore
 from starlette.requests import Request
 import logging
 from api.utils.settings import settings
@@ -20,6 +19,7 @@ from api.v1.schemas.audit_logs import (
 )
 from api.v1.schemas.user import LoginSource
 from api.v1.services import geoip_service
+from api.utils.json_response import JsonResponseDict
 from sqlalchemy.orm import Session
 from db.database import get_db
 import random
@@ -29,19 +29,35 @@ import datetime as dt
 logger = logging.getLogger(__name__)
 
 
-oauth2_router = APIRouter(prefix="/oauth2", tags=["OAuth2"])
+oauth2_router = APIRouter(prefix="/oauth2", tags=["Social Login"])
 
 
-@oauth2_router.post("/login/{provider}")
+@oauth2_router.get("/providers")
+async def all_available_providers():
+    """Retrieve list of available supported OAuth 2.0 Providers"""
+
+    providers = oauth2_service.registered_providers
+
+    return JsonResponseDict(
+        message="Successfully fetched supported OAuth providers", data=providers
+    )
+
+
+@oauth2_router.get("/login/{provider}")
 async def login(
     request: Request,
     provider: str,
     _: None = Depends(geoip_service.blacklisted_country_dependency_check),
 ):
-    """Login route for OAuth2 providers"""
+    """
+    Login route for OAuth2 providers\n
+    The `provider` parameter should be lowercase.
+    """
 
     if provider not in oauth2_service.secureOAuth()._registry:
-        raise HTTPException(status_code=400, detail="Unsupported provider")
+        raise HTTPException(
+            status_code=400, detail=f"{provider} OAuth is not supported"
+        )
 
     # Redirect to the provider's authorization URL
     if provider == "github":
@@ -60,12 +76,27 @@ async def login(
             request, redirect_uri
         )
 
+    elif provider == "microsoft":
+        redirect_uri = request.url_for("authorize", provider="microsoft")
+        return await oauth2_service.secureOAuth().microsoft.authorize_redirect(
+            request, redirect_uri
+        )
 
-@oauth2_router.get("/authorize/{provider}", include_in_schema=False)
+    elif provider == "apple":
+        redirect_uri = request.url_for("authorize", provider="apple")
+        return await oauth2_service.secureOAuth().apple.authorize_redirect(
+            request, redirect_uri
+        )
+
+
+@oauth2_router.get("/authorize/{provider}/callback")
 async def authorize(
     provider: str, request: Request, bgt: BackgroundTasks, db: Session = Depends(get_db)
 ):
-    """Authorization callback route for OAuth2 providers"""
+    """
+    Authorization callback route for OAuth2 providers\n
+    The `provider` parameter should be all lowercase.
+    """
 
     if provider not in oauth2_service.secureOAuth()._registry:
         raise HTTPException(status_code=400, detail="Unsupported provider")
@@ -90,22 +121,50 @@ async def authorize(
             "me?fields=id,name,email,first_name,middle_name,last_name,birthday,gender,picture",
             token=token,
         )
+    elif provider == "microsoft":
+        token = await oauth2_service.secureOAuth().microsoft.authorize_access_token(
+            request
+        )
+        response = await oauth2_service.secureOAuth().microsoft.get("me", token=token)
+        user_info = response.json()
+        email = user_info.get("mail", user_info.get("userPrincipalName"))
+        user_info["email"] = email
+
+    elif provider == "apple":
+        token = await oauth2_service.secureOAuth().apple.authorize_access_token(request)
+        id_token = token.get("id_token", None)
+        if not id_token:
+            raise HTTPException(status_code=400, detail="Invalid User Apple ID token")
+        user_info = token
+
     else:
         raise HTTPException(status_code=400, detail="Unsupported provider")
 
     user_email = user_info.get("email", None)
+    user_obj = None
+    user_exist = False
 
     if not user_email:
+        if provider == "apple":
+            # Apple may not provide email if it's not verified or if the user chose to hide it
+            # get user object with apple persistent sub id
+            # user_exist = True
+            # user_obj =
+            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Invalid user object from OAuth provider",
         )
 
     # generate user access and refresh tokens
-    user_exist, user_obj = User().user_exists(db=db, email=user_email)
+    if not user_exist and not user_obj:
+        user_exist, user_obj = User().user_exists(db=db, email=user_email)
 
     if not user_exist:
-        user = User(email=user_email, password=str(random.randint(5, 15)))
+        user = User(
+            email=user_email,
+            password=user_service.hash_password(str(random.randint(5, 150))),
+        )
         user.is_active = True
         user.is_verified = True
         user.save(db=db)
@@ -147,12 +206,16 @@ async def authorize(
         user.login_source = LoginSource.FACEBOOK
     elif provider == "google":
         user.login_source = LoginSource.GOOGLE
+    elif provider == "apple":
+        user.login_source = LoginSource.APPLE
+    elif provider == "microsoft":
+        user.login_source = LoginSource.MICROSOFT
 
     # update login source and last login time
     user.save(db=db)
 
     # save user device
-    device_info = get_device_info(request)
+    device_info = await get_device_info(request)
     devices_service.create_with_bgt(db=db, device_info=device_info, owner=user, bgt=bgt)
 
     # construct redirect url
@@ -174,22 +237,17 @@ async def authorize(
 
     # set cookies
     if settings.ALLOW_AUTH_COOKIES:
-        response.set_cookie(
-            key="access_token",
-            value=user_access_token,
-            httponly=True,
-            secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        JWT_REFRESH_EXPIRY_SECONDS = int(
+            dt.timedelta(days=settings.JWT_REFRESH_EXPIRY_DAYS).total_seconds()
         )
-
         response.set_cookie(
             key="refresh_token",
             value=user_refresh_token,
             httponly=True,
             secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.JWT_REFRESH_EXPIRY,
+            samesite=settings.AUTH_COOKIE_SAME_SITE,
+            path=request.url_for("refresh").path,
+            expires=JWT_REFRESH_EXPIRY_SECONDS,
         )
 
     # audit log

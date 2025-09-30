@@ -11,9 +11,15 @@ from api.v1.schemas.main import ProbeServerResponse, HomeResponse
 from api.core.logging.logging_config import setup_logging
 from fastapi.templating import Jinja2Templates
 from api.utils.json_response import JsonResponseDict
-from api.utils.schedulers import scheduler  # type: ignore
+from api.utils.vault_utils import (
+    rotate_service_signing_key,
+    prune_old_keys,
+    rotation_worker,
+)
+from api.utils.schedulers import scheduler
 from api.utils.settings import settings
 from starlette.middleware.sessions import SessionMiddleware
+import asyncio
 
 
 @asynccontextmanager
@@ -24,14 +30,30 @@ async def lifespan(app: FastAPI):
     # setup application level log
     setup_logging()
     # setup and register schedulers
-    scheduler.start()
+    if not scheduler.running:
+        scheduler.start()
     # Initiate GeoIP tracker
     MMDB_TRACKER()
+    # Genrate Service Apps RS256 Keypair
+    current_kid = await rotate_service_signing_key(app)
+    print(f"kid: {current_kid}")  # Dev debug
+    # Prune services keys on startup. system will autonatically prune thereafter
+    prune_old_keys()
+    # Automatic service keys rotation
+    app.state.service_keypair_rotation_task = asyncio.create_task(rotation_worker(app))
 
     yield
 
-    # shutdown events
-    scheduler.shutdown()
+    # SHUTDOWN EVENTS
+    # shutdown scheduler
+    scheduler.shutdown(wait=False)
+    # stop key rotation task
+    app.state.service_keypair_rotation_task.cancel()
+    try:
+        await app.state.service_keypair_rotation_task
+    except asyncio.CancelledError:
+        # This error is expected when cancelling the task
+        pass
 
 
 if settings.DEBUG_MODE:
@@ -45,16 +67,12 @@ app = FastAPI(
     title="FastAPI Authentication System",
     description="Welcome to FastAPI Authentication system by [Ajiboye Pius A.](https://ajiboye-pius.vercel.app)",
     version="1.0.0",
-    license_info={"name": "MIT", "url": "https://ajiboye-pius.vercel.app"},
+    license_info={"name": "MIT"},
     contact={
         "name": "AuthSystem API Support",
-        "url": "https://ajiboye-pius.vercel.app",
-        "email": "ajiboyeadeleye080@gmail.com",
     },
     docs_url="/documentation",
     openapi_url=openapi_url,
-    # root_path="/api/auth",
-    # root_path_in_servers=False,
 )
 
 # CROSS-ORIGIN MIDDLEWARE
@@ -144,7 +162,7 @@ async def http_exception(request: Request, exc: HTTPException):
 
 
 @app.exception_handler(404)
-async def http_exception(request: Request, exc: HTTPException):
+async def not_found_exception(request: Request, exc: HTTPException):
     """HTTP exception handler"""
 
     return JsonResponseDict(
@@ -159,7 +177,8 @@ async def validation_exception(request: Request, exc: RequestValidationError):
     """Validation exception handler"""
 
     errors = [
-        {"loc": error["loc"], "msg": error["msg"], "type": error["type"]}
+        f'{error["msg"]}'
+        + f'{". location: " + str(error["loc"]) if error["loc"] else ""}'
         for error in exc.errors()
     ]
 

@@ -281,11 +281,7 @@ async def soft_delete_auth_user(
     Only accessible to superadmins
     """
 
-    if not any([user.is_superadmin, user.is_moderator]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="You cannot perform this action",
-        )
+    user_service.ensure_administrator(user, "You cannot perform this action")
 
     try:
         user = user_service.delete(db=db, user_id=user_id)
@@ -430,16 +426,13 @@ async def admin_activate_user(
     user_id: str = Path(..., description="ID of user to activate or reactivate"),
     user: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
-    moderator_superadmin: User = Depends(user_service.get_current_user),
+    admin: User = Depends(user_service.get_current_user),
 ):
     """
-    [Moderator, Superadmin] Activate an Auth user.
+    [Moderator, Superadmin] Activate account.
     """
 
-    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
-        )
+    user_service.ensure_administrator(admin)
 
     try:
         user = user_service.admin_activate_user(db=db, user_id=user_id)
@@ -493,15 +486,12 @@ async def deactivate_a_user_auth_account(
     schema: DeactivateUserSchema,
     bgt: BackgroundTasks,
     user_id: str = Path(..., description="ID of the user to deactivate"),
-    moderator_superadmin: User = Depends(user_service.get_current_user),
+    admin: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """ """
+    """Deactivate account"""
 
-    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
-        )
+    user_service.ensure_administrator(admin)
 
     user = user_service.fetch_by_id(db=db, id=user_id)
 
@@ -528,7 +518,7 @@ async def deactivate_a_user_auth_account(
 )
 def ban_a_user_account(
     data: AccountBanRequest,
-    moderator_superadmin: User = Depends(user_service.get_current_user),
+    admin: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -536,10 +526,7 @@ def ban_a_user_account(
     Only accessible to superadmins and moderators.
     """
 
-    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
-        )
+    user_service.ensure_administrator(admin)
 
     user = user_service.ban_user(
         db=db, user_id=data.user_identifier, reason=data.reason
@@ -559,7 +546,7 @@ def ban_a_user_account(
 @account_router.patch("/unban", status_code=status.HTTP_200_OK, tags=["Account"])
 def unban_a_user_account(
     data: AccountUnbanRequest,
-    moderator_superadmin: User = Depends(user_service.get_current_user),
+    admin: User = Depends(user_service.get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -567,10 +554,7 @@ def unban_a_user_account(
     Only accessible to superadmins and moderators.
     """
 
-    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
-        )
+    user_service.ensure_administrator(admin)
 
     user = user_service.unban_user(
         db=db, user_id=data.user_identifier, reason=data.reason
@@ -601,10 +585,7 @@ async def restore_soft_deleted_account(
     The endpoint validates the email address domain (if email is used).
     """
 
-    if not any([moderator_superadmin.is_superadmin, moderator_superadmin.is_moderator]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not enough permissions."
-        )
+    user_service.ensure_administrator(moderator_superadmin)
 
     restored_user = user_service.restore_soft_deleted_user(
         db=db, user_identifier=data.user_identifier

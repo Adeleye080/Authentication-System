@@ -39,15 +39,24 @@ class Settings(BaseSettings):
     APP_SERVICE_TOKEN_EXPIRE_HOUR: int = config(
         "APP_SERVICE_TOKEN_EXPIRE_HOUR", cast=int, default=5
     )
+    APP_SERVICE_KEYPAIR_ROTATION_MINUTES: int = config(
+        "APP_SERVICE_KEYPAIR_ROTATION_MINUTES", cast=int, default=30
+    )
     VERIFICATION_TOKEN_EXPIRATION_TIME: int = config(
         "VERIFICATION_TOKEN_EXPIRATION_TIME", cast=int, default=600
     )  # 10 minutes
-    JWT_REFRESH_EXPIRY: int = config(
-        "JWT_REFRESH_EXPIRY_DAYS", cast=int, default=30
+    JWT_REFRESH_EXPIRY_DAYS: int = config(
+        "JWT_REFRESH_EXPIRY_DAYS_DAYS", cast=int, default=30
     )  # 30 days
-    ALLOW_AUTH_COOKIES: bool = config("ALLOW_AUTH_COOKIES", cast=bool, default=True)
+    ALLOW_AUTH_COOKIES: bool = config("ALLOW_AUTH_COOKIES", cast=bool, default=False)
+    ACCESS_TOKEN_COOKIE_NAME: str = config(
+        "ACCESS_TOKEN_COOKIE_NAME", cast=str, default="access_token"
+    )
+    REFRESH_TOKEN_COOKIE_NAME: str = config(
+        "REFRESH_TOKEN_COOKIE_NAME", cast=str, default="refresh_token"
+    )
     AUTH_SECURE_COOKIES: bool = config("SECURE_COOKIES", cast=bool, default=True)
-    AUTH_SAME_SITE: str = config("SAME_SITE", cast=str, default="strict")
+    AUTH_COOKIE_SAME_SITE: str = config("SAME_SITE", cast=str, default="Strict")
 
     ALLOW_SMS_AUTH: bool = config("ALLOW_SMS_AUTH", default=False, cast=bool)
     USER_SERVICE_PHONE_NUMBER_URL: str = config(
@@ -88,7 +97,7 @@ class Settings(BaseSettings):
 
     # APP INFO
     APP_NAME: str = config("APP_NAME", default="FASTAPI AUTH SYSTEM")
-    APP_URL: str = config("APP_URL", default="fastapi-authsystem.example.com")
+    APP_URL: str = config("APP_URL", default="auth.fastapi-authsystem.com")
 
     FRONTEND_HOME_URL: str = config("FRONTEND_HOME_URL")
     FRONTEND_DASHBOARD_URL: str = config(
@@ -117,15 +126,31 @@ class Settings(BaseSettings):
         default="Krq0Q8LWlYYv7famIjZ1k2gyzRZqEnKUqeEz2JX9CaQ=",
     )
 
+    ENABLE_GOOGLE_OAUTH: bool = config("ENABLE_GOOGLE_OAUTH", cast=bool, default=True)
+    ENABLE_GITHUB_OAUTH: bool = config("ENABLE_GITHUB_OAUTH", cast=bool, default=True)
+    ENABLE_FACEBOOK_OAUTH: bool = config(
+        "ENABLE_FACEBOOK_OAUTH", cast=bool, default=True
+    )
+    ENABLE_MICROSOFT_OAUTH: bool = config(
+        "ENABLE_MICROSOFT_OAUTH", cast=bool, default=True
+    )
+    ENABLE_APPLE_OAUTH: bool = config("ENABLE_APPLE_OAUTH", cast=bool, default=False)
+
     # OAUTH CONFIG
     GITHUB_CLIENT_ID: str = config("GITHUB_CLIENT_ID")
-    GITHUB_CLIENT_SECRET: str = config("GITHUB_CLIENT_SECRET", default="acde12")
+    GITHUB_CLIENT_SECRET: str = config("GITHUB_CLIENT_SECRET", default="")
 
     GOOGLE_CLIENT_ID: str = config("GOOGLE_CLIENT_ID")
     GOOGLE_CLIENT_SECRET: str = config("GOOGLE_CLIENT_SECRET")
 
-    FACEBOOK_APP_ID: str = config("FACEBOOK_APP_ID", default="acde12")
-    FACEBOOK_APP_SECRET: str = config("FACEBOOK_APP_SECRET", default="acde12")
+    FACEBOOK_APP_ID: str = config("FACEBOOK_APP_ID", default="")
+    FACEBOOK_APP_SECRET: str = config("FACEBOOK_APP_SECRET", default="")
+
+    MICROSOFT_CLIENT_ID: str = config("MICROSOFT_CLIENT_ID", default="")
+    MICROSOFT_CLIENT_SECRET: str = config("MICROSOFT_CLIENT_SECRET", default="")
+
+    APPLE_PRIVATE_KEY: str = config("APPLE_PRIVATE_KEY", default="")
+    APPLE_KEY_ID: str = config("APPLE_KEY_ID", default="")
 
     # MAXMIND CREDENTIALS (FOR GEOLOCATION)
     MAXMIND_ACCOUNT_ID: str = config("MAXMIND_ACCOUNT_ID")

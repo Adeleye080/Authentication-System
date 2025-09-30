@@ -11,13 +11,12 @@ The system supports both primary and secondary roles for users. While the primar
 - Assigning multiple roles to a user (e.g., `user` + `auditor`, or `admin` + `support`)
 - Defining custom roles and scopes for organizations or teams
 - Dynamic permission checks based on both primary and secondary roles
-
-> **Note:** The secondary/custom roles feature is partially implemented in the codebase and will be expanded in future releases to support full custom RBAC, including organization-level role management and dynamic permission assignment.
+- Organization-level role management and dynamic permission assignment
 
 ## Features
 
 - **JWT Authentication**: Secure, stateless authentication using JSON Web Tokens for API access.
-- **OAuth2 Support**: Social login and third-party authentication (Google, Facebook, etc).
+- **OAuth2 Support**: Social login and third-party authentication (Google, Facebook, GitHub, Apple and Microsoft).
 - **Multi-Factor Authentication (MFA)**: TOTP (Google Authenticator), SMS OTP, and Email OTP for enhanced security.
 - **Device & Location Tracking**: Detects suspicious logins using device fingerprinting and multi-source geo-location tracking (MaxMind, IP-API, IPAPI.co, IPWho.is).
 - **Country Blacklisting**: Block or restrict access from specific countries with admin controls, audit history, and multiple fallback location providers.
@@ -49,31 +48,53 @@ graph TD
 ## Implemented Features
 
 - **Authentication Methods**:
+
   - TOTP (Time-based One-Time Password) with QR code setup
   - SMS OTPs with configurable providers
   - Email OTPs for suspicious login detection
   - Password-based authentication with secure hashing
+  - Magic Link authentication via secure email
+  - OAuth2 login (Google, Facebook, GitHub, Apple and Microsoft)
   - Refresh token tracking with device fingerprinting
+  - Service app authentication with API keys and scopes
+
 - **Security Features**:
   - Multi-provider geolocation (MaxMind, IP-API, IPAPI.co, IPWho.is)
-  - Country blacklisting with admin controls and audit history
+  - Country blacklisting with:
+    - Admin controls for blocking/unblocking countries
+    - Detailed audit history of changes
+    - Multiple fallback location providers
+    - Automatic IP address validation
   - Comprehensive audit logging (file and database)
   - Device fingerprinting and suspicious login detection
   - Webhook notifications for critical events
-  - Secondary/custom roles system (partial implementation)
+  - Secondary/custom roles system with:
+    - Organization-level role management
+    - Dynamic permission assignment
+    - Custom role hierarchies
+    - Flexible scope definitions
+- **User Management**:
+  - Account activation and deactivation
+  - Account banning and unbanning with history
+  - Account status tracking and auditing
+- **Service App Authentication**:
+  - API key generation and management
+  - Granular scope-based access control
+  - Rate limiting and usage tracking
+  - Automatic key rotation support
 
 ## Planned & Incomplete Features
 
 - Redis for OTP storage (improved scalability and speed)
 - Push-based MFA (e.g., mobile app push notifications)
 - Face recognition for biometric authentication
-- Advanced RBAC for organizations (customizable roles, secondary roles, scopes, and policies)
-- Google CAPTCHA for bot prevention
+- Enhanced RBAC policies and permissions caching
 - Context-aware access (device, IP, time-of-day, geo-location, behavioral analysis)
 - Custom verification system for external and internal services
-- User activation/deactivation, banning, and advanced admin controls
 - Improved webhook reliability, retry, and dead-letter queue
 - Notification enhancements (in-app, push, multi-channel)
+- Enhanced magic link features (expiration policies, usage tracking)
+- Improved suspicious login detection
 
 ## Quick Start
 
@@ -172,3 +193,5 @@ ISC License. See [LICENSE](LICENSE) for details.
 
 Ajiboye Adeleye Pius  
 <ajiboyeadeleye080@gmail.com>
+
+_This product includes GeoLite2 Data created by [MaxMind](https://www.maxmind.com.)_

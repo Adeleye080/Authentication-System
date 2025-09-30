@@ -40,7 +40,9 @@ def get_db_engine(test_mode: bool = False):
 
 engine = get_db_engine()
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(
+    autocommit=False, autoflush=False, bind=engine, expire_on_commit=False
+)
 
 db_session = scoped_session(SessionLocal)
 

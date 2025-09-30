@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Boolean, String, Index, Enum, DateTime, LargeBinary
 from sqlalchemy.orm import relationship
 from api.v1.models.base_model import BaseModel
+from api.v1.models.roles import auth_user_roles_association
 from api.v1.schemas.user import LoginSource
 from sqlalchemy.orm import Session
 from pydantic import EmailStr
@@ -22,9 +23,21 @@ class User(BaseModel):
     last_login = Column(DateTime, nullable=True)
     login_source = Column(Enum(LoginSource), nullable=True)
     is_banned = Column(Boolean, default=False, nullable=False)
-    secondary_role = Column(String(128), nullable=True)
 
-    attributes = relationship("UserAttribute", backref="user", uselist=True)
+    secondary_roles = relationship(
+        "SecondaryRole",
+        backref="user",
+        secondary=auth_user_roles_association,
+        uselist=True,
+    )
+    attributes = relationship(
+        "UserAttribute",
+        backref="user",
+        uselist=True,
+        cascade="all, delete-orphan",
+        # I'm using 'selectin' to reduce the number of queries when loading user with attributes
+        lazy="selectin",
+    )
 
     refresh_tokens = relationship(
         "RefreshToken",
@@ -37,6 +50,9 @@ class User(BaseModel):
     )
     totp_device = relationship(
         "TOTPDevice", backref="user", uselist=False, cascade="all, delete-orphan"
+    )
+    ban_history = relationship(
+        "AccountBanHistory", backref="user", uselist=True, cascade="all, delete-orphan"
     )
 
     __table_args__ = (
@@ -51,28 +67,32 @@ class User(BaseModel):
         Index("ix_user_is_banned", "is_banned"),
         Index("ix_user_is_superadmin", "is_superadmin"),
         Index("ix_user_is_moderator", "is_moderator"),
-        Index("ix_user_secondary_role", "secondary_role"),
     )
 
     def to_dict(self, hide_sensitive_data: bool = True):
         obj_dict = super().to_dict()
-        if obj_dict.get("password", False):
-            obj_dict.pop("password")
+        # remove password
+        obj_dict.pop("password", None)
 
         if hide_sensitive_data:
-            # hide all other sensitive data
-            if "login_initiated" in obj_dict.keys():
-                del obj_dict["login_initiated"]
-            if "is_deleted" in obj_dict.keys():
-                del obj_dict["is_deleted"]
-            if "is_moderator" in obj_dict.keys():
-                del obj_dict["is_moderator"]
-            if "is_superadmin" in obj_dict.keys():
-                del obj_dict["is_superadmin"]
-            if "secondary_role" in obj_dict.keys():
-                del obj_dict["secondary_role"]
-            if "is_banned" in obj_dict.keys():
-                del obj_dict["is_banned"]
+            obj_dict.pop("login_initiated", None)
+            obj_dict.pop("is_deleted", None)
+            obj_dict.pop("is_banned", None)
+
+        # 1. Add secondary roles
+        obj_dict["secondary_roles"] = []
+        if self.secondary_roles:
+            obj_dict["secondary_roles"] = [role.name for role in self.secondary_roles]
+
+        # 2. Add attributes
+        if self.attributes:
+            attributes_dict = {}
+            for user_attr_record in self.attributes:
+                if user_attr_record.attribute and user_attr_record.attribute_value:
+                    attribute_name = user_attr_record.attribute.name
+                    attribute_value = user_attr_record.attribute_value.value
+                    attributes_dict[attribute_name] = attribute_value
+            obj_dict["attributes"] = attributes_dict
 
         return obj_dict
 
@@ -91,7 +111,7 @@ class User(BaseModel):
 
     def user_exists(
         self, db: Session, id: str = None, email: EmailStr = None
-    ) -> Tuple[bool, dict]:
+    ) -> Tuple[bool, "User"]:
         """
         Check if user exists in the database with the given email or ID.
         If both are given, it will check for the first one that is found.
@@ -100,7 +120,7 @@ class User(BaseModel):
         :param email: User email
         :param id: User ID
 
-        :return: (True, user_obj) if user exists, (False, {}) otherwise
+        :return: (True, user_object) if user exists, (False, None) otherwise
         """
 
         if not any([email, id]):
@@ -117,6 +137,6 @@ class User(BaseModel):
             user = db.query(User).filter_by(email=email).first()
 
         if user:
-            return (True, user.to_dict())
+            return (True, user)
 
-        return False, {}
+        return False, None

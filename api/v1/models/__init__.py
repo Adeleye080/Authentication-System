@@ -7,3 +7,4 @@ from api.v1.models.country_blacklist import CountryBlacklist, CountryBlacklistHi
 from api.v1.models.attributes import UserAttribute
 from api.v1.models.mmdb import MMDB_TRACKER
 from api.v1.models.service_apps import ServiceApp
+from api.v1.models.roles import SecondaryRole
