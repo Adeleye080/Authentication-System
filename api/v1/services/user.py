@@ -1,4 +1,5 @@
-from fastapi import HTTPException, Depends, Request, status, Security
+from fastapi import HTTPException, Depends, status, Security, Header
+from starlette.requests import Request
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from typing import Tuple, Optional, List
@@ -432,7 +433,7 @@ class UserService(Service):
         """
 
         expires = dt.datetime.now(dt.timezone.utc) + dt.timedelta(
-            days=settings.JWT_REFRESH_EXPIRY
+            days=settings.JWT_REFRESH_EXPIRY_DAYS
         )
         data = {"sub": user_id, "exp": expires, "type": "refresh"}
         if user_device_fingerprint:
@@ -645,7 +646,9 @@ class UserService(Service):
     ) -> Tuple[str, str]:
         """
         Function to generate new access token and rotate refresh token.
-        Revokes current refresh token
+        Revokes current refresh token.
+
+        Return (access_token, refresh_token, user)
         """
 
         credentials_exception = HTTPException(
@@ -694,7 +697,7 @@ class UserService(Service):
                 user_device_fingerprint=current_device_fingerprint,
             )
 
-            return (access, refresh)
+            return (access, refresh, owner)
 
     def get_user_object_using_refresh_token(
         self, refresh_token: str, db: Session
@@ -737,7 +740,9 @@ class UserService(Service):
         return owner
 
     def get_current_user(
-        self, access_token: str = Security(oauth2_scheme), db: Session = Depends(get_db)
+        self,
+        access_token: str = Security(oauth2_scheme),
+        db: Session = Depends(get_db),
     ) -> User:
         """
         Dependency to get current logged in user.
@@ -765,7 +770,9 @@ class UserService(Service):
         return user
 
     def get_current_superadmin(
-        self, access_token: str = Security(oauth2_scheme), db: Session = Depends(get_db)
+        self,
+        access_token: str = Security(oauth2_scheme),
+        db: Session = Depends(get_db),
     ):
         """Dependency to get current superadmin user"""
         try:
@@ -795,7 +802,9 @@ class UserService(Service):
         return user
 
     def get_current_moderator(
-        self, access_token: str = Security(oauth2_scheme), db: Session = Depends(get_db)
+        self,
+        access_token: str = Security(oauth2_scheme),
+        db: Session = Depends(get_db),
     ):
         """Dependency to get current moderator user"""
         try:
@@ -1382,6 +1391,7 @@ class UserService(Service):
     def validate_temp_token_and_mark_as_used(self, db: Session, token: str) -> None:
         """
         Validates that a temporary token is unused. raise HTTPError if token has been previously used.
+        Marks the token as used since validating means it's being used.
         """
 
         temp_token = self.fetch_temp_token(db=db, token=token)
