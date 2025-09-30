@@ -237,22 +237,17 @@ async def authorize(
 
     # set cookies
     if settings.ALLOW_AUTH_COOKIES:
-        response.set_cookie(
-            key="access_token",
-            value=user_access_token,
-            httponly=True,
-            secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        JWT_REFRESH_EXPIRY_SECONDS = int(
+            dt.timedelta(days=settings.JWT_REFRESH_EXPIRY_DAYS).total_seconds()
         )
-
         response.set_cookie(
             key="refresh_token",
             value=user_refresh_token,
             httponly=True,
             secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.JWT_REFRESH_EXPIRY,
+            samesite=settings.AUTH_COOKIE_SAME_SITE,
+            path=request.url_for("refresh").path,
+            expires=JWT_REFRESH_EXPIRY_SECONDS,
         )
 
     # audit log
