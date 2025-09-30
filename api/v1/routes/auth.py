@@ -55,7 +55,7 @@ from api.v1.services import (
     geoip_service,
     totp_service,
 )
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 
 auth_router = APIRouter(tags=["Auth"])
@@ -185,22 +185,17 @@ async def login(
 
     # set cookies
     if settings.ALLOW_AUTH_COOKIES:
-        response.set_cookie(
-            key="access_token",
-            value=user_access_token,
-            httponly=True,
-            secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        JWT_REFRESH_EXPIRY_SECONDS = int(
+            timedelta(days=settings.JWT_REFRESH_EXPIRY_DAYS).total_seconds()
         )
-
         response.set_cookie(
             key="refresh_token",
             value=user_refresh_token,
             httponly=True,
             secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.JWT_REFRESH_EXPIRY,
+            samesite=settings.AUTH_COOKIE_SAME_SITE,
+            path=request.url_for("refresh").path,
+            expires=JWT_REFRESH_EXPIRY_SECONDS,
         )
 
     # audit log
@@ -331,22 +326,17 @@ async def magic_link_login(
     )
 
     if settings.ALLOW_AUTH_COOKIES:
-        response.set_cookie(
-            key="access_token",
-            value=user_access_token,
-            httponly=True,
-            secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        JWT_REFRESH_EXPIRY_SECONDS = int(
+            timedelta(days=settings.JWT_REFRESH_EXPIRY_DAYS).total_seconds()
         )
-
         response.set_cookie(
             key="refresh_token",
             value=user_refresh_token,
             httponly=True,
             secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.JWT_REFRESH_EXPIRY,
+            samesite=settings.AUTH_COOKIE_SAME_SITE,
+            path=request.url_for("refresh").path,
+            expires=JWT_REFRESH_EXPIRY_SECONDS,  # set to days equivalent in seconds
         )
 
         # loging the event in audit logs
@@ -410,13 +400,23 @@ async def refresh(
 ):
     """Refreshes user token"""
 
+    refresh_token = refresh_token_schema.refresh_token or request.cookies.get(
+        settings.REFRESH_TOKEN_COOKIE_NAME
+    )
+    print(refresh_token)
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Refresh token is required (either in request body or cookies)",
+        )
+
     device_info = await get_device_info(request)
 
     curr_device_fprt = generate_device_fingerprint(device_info.get("user_agent"))
 
-    new_access_token, new_refresh_token = user_service.refresh_access_token(
+    new_access_token, new_refresh_token, user = user_service.refresh_access_token(
         db,
-        refresh_token_schema.refresh_token,
+        refresh_token,
         current_device_fingerprint=curr_device_fprt,
     )
 
@@ -429,16 +429,6 @@ async def refresh(
             "refresh": new_refresh_token,
         },
     )
-
-    # user info
-    user = user_service.get_user_object_using_refresh_token(
-        refresh_token=refresh_token_schema.refresh_token, db=db
-    )
-    # user device info
-    if device_info:
-        devices_service.create_with_bgt(
-            db=db, owner=user, device_info=device_info, bgt=bgt
-        )
 
     # loging the event in audit logs
     audit_log_service.log(
@@ -456,22 +446,17 @@ async def refresh(
 
     # perform other logic such as setting cookies
     if settings.ALLOW_AUTH_COOKIES:
-        response.set_cookie(
-            key="access_token",
-            value=new_access_token,
-            httponly=True,
-            secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        JWT_REFRESH_EXPIRY_SECONDS = int(
+            timedelta(days=settings.JWT_REFRESH_EXPIRY_DAYS).total_seconds()
         )
-
         response.set_cookie(
             key="refresh_token",
             value=new_refresh_token,
             httponly=True,
             secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.JWT_REFRESH_EXPIRY,
+            samesite=settings.AUTH_COOKIE_SAME_SITE,
+            path=request.url_for("refresh").path,
+            expires=JWT_REFRESH_EXPIRY_SECONDS,
         )
 
     return response
@@ -832,22 +817,17 @@ async def verify_email_code(
 
     # set cookies
     if settings.ALLOW_AUTH_COOKIES:
-        response.set_cookie(
-            key="access_token",
-            value=access_token,
-            httponly=True,
-            secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        JWT_REFRESH_EXPIRY_SECONDS = int(
+            timedelta(days=settings.JWT_REFRESH_EXPIRY_DAYS).total_seconds()
         )
-
         response.set_cookie(
             key="refresh_token",
             value=user_refresh_token,
             httponly=True,
             secure=settings.AUTH_SECURE_COOKIES,
-            samesite=settings.AUTH_SAME_SITE,
-            expires=settings.JWT_REFRESH_EXPIRY,
+            samesite=settings.AUTH_COOKIE_SAME_SITE,
+            path=request.url_for("refresh").path,
+            expires=JWT_REFRESH_EXPIRY_SECONDS,
         )
 
     # audit log
