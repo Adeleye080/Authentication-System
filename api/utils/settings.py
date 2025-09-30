@@ -45,8 +45,8 @@ class Settings(BaseSettings):
     VERIFICATION_TOKEN_EXPIRATION_TIME: int = config(
         "VERIFICATION_TOKEN_EXPIRATION_TIME", cast=int, default=600
     )  # 10 minutes
-    JWT_REFRESH_EXPIRY: int = config(
-        "JWT_REFRESH_EXPIRY_DAYS", cast=int, default=30
+    JWT_REFRESH_EXPIRY_DAYS: int = config(
+        "JWT_REFRESH_EXPIRY_DAYS_DAYS", cast=int, default=30
     )  # 30 days
     ALLOW_AUTH_COOKIES: bool = config("ALLOW_AUTH_COOKIES", cast=bool, default=False)
     ACCESS_TOKEN_COOKIE_NAME: str = config(
@@ -56,7 +56,7 @@ class Settings(BaseSettings):
         "REFRESH_TOKEN_COOKIE_NAME", cast=str, default="refresh_token"
     )
     AUTH_SECURE_COOKIES: bool = config("SECURE_COOKIES", cast=bool, default=True)
-    AUTH_SAME_SITE: str = config("SAME_SITE", cast=str, default="strict")
+    AUTH_COOKIE_SAME_SITE: str = config("SAME_SITE", cast=str, default="Strict")
 
     ALLOW_SMS_AUTH: bool = config("ALLOW_SMS_AUTH", default=False, cast=bool)
     USER_SERVICE_PHONE_NUMBER_URL: str = config(
