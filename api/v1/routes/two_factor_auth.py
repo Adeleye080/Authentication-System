@@ -1,3 +1,4 @@
+from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from api.v1.services import (
     user_service,
@@ -223,22 +224,16 @@ async def verify_totp(
         )
 
         if settings.ALLOW_AUTH_COOKIES:
-            response.set_cookie(
-                key="access_token",
-                value=access_token,
-                httponly=True,
-                secure=settings.AUTH_SECURE_COOKIES,
-                samesite=settings.AUTH_SAME_SITE,
-                expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+            JWT_REFRESH_EXPIRY_SECONDS = int(
+                timedelta(days=settings.JWT_REFRESH_EXPIRY_DAYS).total_seconds()
             )
-
             response.set_cookie(
                 key="refresh_token",
                 value=refresh_token,
                 httponly=True,
                 secure=settings.AUTH_SECURE_COOKIES,
-                samesite=settings.AUTH_SAME_SITE,
-                expires=settings.JWT_REFRESH_EXPIRY,
+                samesite=settings.AUTH_COOKIE_SAME_SITE,
+                expires=JWT_REFRESH_EXPIRY_SECONDS,
             )
 
         # log to audit
@@ -428,22 +423,16 @@ if settings.ALLOW_SMS_AUTH and settings.USER_SERVICE_PHONE_NUMBER_URL != "0":
         )
 
         if settings.ALLOW_AUTH_COOKIES:
-            response.set_cookie(
-                key="access_token",
-                value=access_token,
-                httponly=True,
-                secure=settings.AUTH_SECURE_COOKIES,
-                samesite=settings.AUTH_SAME_SITE,
-                expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+            JWT_REFRESH_EXPIRY_SECONDS = int(
+                timedelta(days=settings.JWT_REFRESH_EXPIRY_DAYS).total_seconds()
             )
-
             response.set_cookie(
                 key="refresh_token",
                 value=refresh_token,
                 httponly=True,
                 secure=settings.AUTH_SECURE_COOKIES,
-                samesite=settings.AUTH_SAME_SITE,
-                expires=settings.JWT_REFRESH_EXPIRY,
+                samesite=settings.AUTH_COOKIE_SAME_SITE,
+                expires=JWT_REFRESH_EXPIRY_SECONDS,
             )
 
         # log to audit
