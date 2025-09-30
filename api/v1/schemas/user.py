@@ -399,8 +399,8 @@ class LoginToken(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
 
-    refresh_token: str = Field(
-        ...,
+    refresh_token: Optional[str] = Field(
+        None,
         description="Current valid user refresh token",
         pattern=r"^ey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$",
         example="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
