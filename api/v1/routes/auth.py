@@ -358,11 +358,15 @@ async def magic_link_login(
 
 @auth_router.post("/logout", status_code=status.HTTP_200_OK)
 async def logout(
-    refresh_token_schema: RefreshTokenRequest, db: Session = Depends(get_db)
+    refresh_token_schema: RefreshTokenRequest,
+    request: Request,
+    db: Session = Depends(get_db),
 ):
     """Logs user out of the system"""
 
-    refresh_token = refresh_token_schema.refresh_token
+    refresh_token = refresh_token_schema.refresh_token or request.cookies.get(
+        settings.REFRESH_TOKEN_COOKIE_NAME
+    )
     if refresh_token:
         try:
             user_service.revoke_refresh_token(db=db, token=refresh_token)
@@ -403,7 +407,6 @@ async def refresh(
     refresh_token = refresh_token_schema.refresh_token or request.cookies.get(
         settings.REFRESH_TOKEN_COOKIE_NAME
     )
-    print(refresh_token)
     if not refresh_token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -455,7 +458,7 @@ async def refresh(
             httponly=True,
             secure=settings.AUTH_SECURE_COOKIES,
             samesite=settings.AUTH_COOKIE_SAME_SITE,
-            path=request.url_for("refresh").path,
+            path="/auth/api/v1/",
             expires=JWT_REFRESH_EXPIRY_SECONDS,
         )
 
