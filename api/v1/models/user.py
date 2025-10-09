@@ -100,7 +100,12 @@ class User(BaseModel):
         return self.email
 
     def __repr__(self):
-        return f"<User(id={self.id}, email={self.email}, role={self.role})>"
+        role = (
+            "superadmin"
+            if self.is_superadmin
+            else "moderator" if self.is_moderator else "user"
+        )
+        return f"<User(id={self.id}, email={self.email}, role={role})>"
 
     def save(self, db: Session):
         """save changes made to user object to database"""
